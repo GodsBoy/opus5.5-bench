@@ -1066,8 +1066,6 @@ function swirlGeometry(r) {
 }
 const GLASS_GEO = new THREE.SphereGeometry(R_GLASS, 32, 22);
 const SWIRL_GEO = swirlGeometry(R_GLASS);
-const PROXY_GEO = new THREE.SphereGeometry(R_GLASS * 0.72, 12, 8);
-const PROXY_MAT = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
 const _t = V3(), _ax = V3(), _q = new THREE.Quaternion(), UPV = V3(0, 1, 0), ZV = V3(0, 0, 1), _prev = V3();
 
 class Marble {
@@ -1080,10 +1078,9 @@ class Marble {
       const tint = new THREE.Color(TINTS[i % TINTS.length]);
       const glassTint = tint.clone();
       const swirlTint = tint.clone().lerp(new THREE.Color(0xfff6e0), 0.55);
-      const glass = new THREE.Mesh(GLASS_GEO, glassMaterial(glassTint)); glass.renderOrder = 3;
+      const glass = new THREE.Mesh(GLASS_GEO, glassMaterial(glassTint)); glass.castShadow = true;
       const core = new THREE.Mesh(SWIRL_GEO, std({ color: swirlTint, roughness: 0.3, metalness: 0.0, emissive: swirlTint, emissiveIntensity: 0.35, side: THREE.DoubleSide, envMapIntensity: 1.0 }));
-      const proxy = new THREE.Mesh(PROXY_GEO, PROXY_MAT); proxy.castShadow = true;
-      this.spin.add(core, glass, proxy);
+      this.spin.add(core, glass);
       this.spin.rotation.set(i * 1.7, i * 2.3, i * 0.9);
     }
     board.add(this.obj);
@@ -1263,7 +1260,7 @@ function updateLift(dt) {
 /* ==========================================================================
    Sequencer, trip lever, run control
    ========================================================================== */
-const RUNSTATE = { phase: 'ready', dropped: 0, seqDone: true, queued: false, t: 0, launched: false, resultBits: null, hasResult: false };
+const RUNSTATE = { phase: 'ready', dropped: 0, seqDone: true, queued: false, t: 0, launched: false, resultBits: null, hasResult: false, completed: 0 };
 
 function tripLever() {
   TRIP.t = 0; SFX.trip();
@@ -1311,7 +1308,7 @@ function updateRun(dt) {
     }
   } else if (R.phase === 'running') {
     if (R.seqDone && allResting()) {
-      R.resultBits = readToggles(); R.hasResult = true;       // read back from the flip flops
+      R.resultBits = readToggles(); R.hasResult = true; R.completed++;   // read back from the flip flops
       R.phase = 'result'; R.t = 0;
     }
   } else if (R.phase === 'result') {
@@ -1339,7 +1336,8 @@ function updateDemo(dt) {
   if (!DEMO.active) return; DEMO.t += dt;
   const [a, b] = DEMO.cases[DEMO.idx] || [];
   if (DEMO.stage === 'waitReady') {
-    if (RUNSTATE.phase === 'ready') {
+    // inputs may be set while the marbles are still being lifted home; the RUN pull then waits for the machine
+    if (RUNSTATE.phase === 'ready' || (RUNSTATE.phase === 'refill' && RUNSTATE.t > 1.5)) {
       DEMO.flips = [];
       for (const k of [3, 2, 1, 0]) if (POCKETS[k].sw !== +a[3 - k]) DEMO.flips.push(k);
       for (const k of [3, 2, 1, 0]) if (POCKETS[4 + k].sw !== +b[3 - k]) DEMO.flips.push(4 + k);
@@ -1351,9 +1349,9 @@ function updateDemo(dt) {
       else { DEMO.stage = 'pull'; DEMO.t = -0.9; }
     }
   } else if (DEMO.stage === 'pull') {
-    if (DEMO.t >= 0) { requestRun(); DEMO.stage = 'running'; DEMO.t = 0; }
+    if (DEMO.t >= 0) { DEMO.waitFor = RUNSTATE.completed + 1; requestRun(); DEMO.stage = 'running'; DEMO.t = 0; }
   } else if (DEMO.stage === 'running') {
-    if (RUNSTATE.hasResult && RUNSTATE.phase !== 'starting' && RUNSTATE.phase !== 'running') { DEMO.stage = 'hold'; DEMO.t = 0; }
+    if (RUNSTATE.completed >= DEMO.waitFor) { DEMO.stage = 'hold'; DEMO.t = 0; }
   } else if (DEMO.stage === 'hold') {
     if (DEMO.t > 1.2) {
       DEMO.idx++;
@@ -1415,7 +1413,7 @@ controls.minDistance = 0.6; controls.maxDistance = 6; controls.maxPolarAngle = M
 controls.target.set(-0.02, 0.78, 0);
 const CAM = { focus: V3(-0.02, 0.78, 0), fv: V3(), dist: 3.2, dv: 0, yaw: 0, pitch: 0.12, extent: 0.4, user: false, userUntil: 0, resync: false };
 controls.addEventListener('start', () => { CAM.user = true; });
-controls.addEventListener('end', () => { CAM.user = false; CAM.userUntil = performance.now() / 1000 + 6; CAM.resync = true; });
+controls.addEventListener('end', () => { CAM.user = false; CAM.userUntil = clock + 6; CAM.resync = true; });
 
 const OVERVIEW = { c: V3(-0.02, 0.73, 0.05), halfW: 0.9, halfH: 0.66 };
 const _w = V3();
@@ -1664,6 +1662,13 @@ requestAnimationFrame(frame);
 window.__marble = {
   RUNSTATE, TOGGLES, POCKETS, MARBLES, SEQ, LIFT, GUTTER, DEMO, QUALITY, requestRun, setDemo, toggleSwitch, readToggles,
   advance(sec) { const n = Math.round(sec * 60); for (let i = 0; i < n; i++) { simulate(1 / 60); clock += 1 / 60; updateCamera(1 / 60, clock); } },
+  screenOf(kind, i) {
+    const v = kind === 'lever' ? LEVER.group.localToWorld(V3(0, 0.2, 0)) : board.localToWorld(POCKETS[i].swPos.clone().add(V3(0.012, 0, 0)));
+    v.project(camera); const r = canvas.getBoundingClientRect();
+    return [Math.round((v.x + 1) / 2 * r.width + r.left), Math.round((1 - v.y) / 2 * r.height + r.top)];
+  },
+  look(px, py, pz, tx, ty, tz) { CAM.userUntil = 1e12; camera.position.set(px, py, pz); controls.target.set(tx, ty, tz); camera.lookAt(tx, ty, tz); },
+  info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures }; },
   screenOf(kind, i) {
     const v = kind === 'lever' ? LEVER.group.localToWorld(V3(0, 0.2, 0)) : board.localToWorld(POCKETS[i].swPos.clone().add(V3(0.012, 0, 0)));
     v.project(camera); const r = canvas.getBoundingClientRect();
