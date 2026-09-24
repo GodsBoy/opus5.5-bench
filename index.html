@@ -60,9 +60,15 @@
   button#demo.on { background: linear-gradient(#8fd0a2, #4c8f63); border-color: #bfe8c9; }
   .hint { font-size: 11px; color: var(--ink-dim); letter-spacing: 0.06em; text-align: right; line-height: 1.5; }
   @media (max-width: 640px) {
+    #tl { top: 10px; left: 10px; max-width: calc(100% - 150px); }
+    #tr { top: 10px; right: 10px; }
+    .sub { display: none; }
+    .title { font-size: 11px; letter-spacing: 0.2em; }
     .row { font-size: 15px; } .bits { font-size: 14px; }
     #rbits, #rdec { font-size: 24px; }
     .count { font-size: 22px; }
+    #bc { bottom: 70px; width: calc(100% - 20px); }
+    #br { right: 50%; transform: translateX(50%); bottom: 12px; }
     .hint { display: none; }
   }
 </style>
@@ -1062,7 +1068,7 @@ const GLASS_GEO = new THREE.SphereGeometry(R_GLASS, 32, 22);
 const SWIRL_GEO = swirlGeometry(R_GLASS);
 const PROXY_GEO = new THREE.SphereGeometry(R_GLASS * 0.72, 12, 8);
 const PROXY_MAT = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
-const _t = V3(), _ax = V3(), _q = new THREE.Quaternion(), UPV = V3(0, 1, 0);
+const _t = V3(), _ax = V3(), _q = new THREE.Quaternion(), UPV = V3(0, 1, 0), ZV = V3(0, 0, 1), _prev = V3();
 
 class Marble {
   constructor(i, isBall) {
@@ -1096,7 +1102,7 @@ class Marble {
     _ax.crossVectors(UPV, dir); const l = _ax.length(); if (l < 1e-4) return; _ax.divideScalar(l);
     _q.setFromAxisAngle(_ax, dist / this.r); this.spin.quaternion.premultiply(_q);
   }
-  spinZ(a) { _q.setFromAxisAngle(V3(0, 0, 1), a); this.spin.quaternion.premultiply(_q); }
+  spinZ(a) { _q.setFromAxisAngle(ZV, a); this.spin.quaternion.premultiply(_q); }
 }
 const MARBLES = [];
 for (let i = 0; i < 8; i++) { const m = new Marble(i, false); MARBLES.push(m); POCKETS[i].marble = m; m.hold(POCKETS[i].rest); }
@@ -1166,12 +1172,12 @@ function bRailEvents() {
 function tryPocket(m, p) {
   if (m.isBall || p.marble || p.reserved || p.gateOpen > 0.02) return;          // occupied or too big: roll over it
   p.reserved = true;
-  const from = m.obj.position.clone(), to = p.rest.clone(); const dir = to.clone().sub(from); let t = 0; const dur = 0.085;
+  const from = m.obj.position.clone(), to = p.rest.clone(); const dir = to.clone().sub(from).normalize(); let t = 0; const dur = 0.085;
   m.attach(dt => {
     t += dt; const u = clamp(t / dur, 0, 1);
-    const prev = m.obj.position.clone();
+    _prev.copy(m.obj.position);
     m.obj.position.lerpVectors(from, to, u * u);
-    m.rollAlong(dir.clone().normalize(), m.obj.position.distanceTo(prev));
+    m.rollAlong(dir, m.obj.position.distanceTo(_prev));
     if (u >= 1) { p.marble = m; p.reserved = false; m.hold(to); m.home = true; SFX.tick(0.45); }
   });
 }
@@ -1239,7 +1245,7 @@ function tryPickup(boundaryAngle) {
   m.attach(() => {
     const y = LIFT_Y0 + (LIFT.angle - a0) / (Math.PI * 2) * LIFT.pitch;
     m.obj.position.set(LIFT_X, y + off, ZT);
-    m.rollAlong(V3(0, 0, 1), (y - lastY) * 0.4); lastY = y;
+    m.rollAlong(ZV, (y - lastY) * 0.4); lastY = y;
     if (y >= LIFT_Y1) onLiftTop(m);
   });
   SFX.tick(0.3);
