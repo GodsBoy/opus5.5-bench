@@ -1,0 +1,1655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marble Adder</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --ink: #f3e3c3;
+    --ink-dim: rgba(243, 227, 195, 0.55);
+    --brass: #e0b45e;
+    --panel: rgba(22, 14, 8, 0.52);
+    --line: rgba(224, 180, 94, 0.28);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0906; }
+  body {
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    color: var(--ink);
+    background: radial-gradient(ellipse at 50% 42%, #3a2616 0%, #1c120b 52%, #090604 100%);
+  }
+  canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+  .vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,0.42) 100%);
+  }
+  .hud { position: fixed; pointer-events: none; font-variant-numeric: tabular-nums; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    padding: 8px 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+  }
+  #tl { top: 16px; left: 16px; }
+  #tr { top: 16px; right: 16px; text-align: right; }
+  #bc { bottom: 16px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #br { bottom: 16px; right: 16px; pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .title { font-size: 13px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--brass); }
+  .sub { font-size: 11px; letter-spacing: 0.08em; color: var(--ink-dim); margin-top: 2px; }
+  .row { display: flex; align-items: baseline; gap: 10px; margin-top: 5px; font-size: 17px; }
+  .row .lab { color: var(--brass); width: 14px; font-weight: 600; }
+  .bits { letter-spacing: 0.22em; font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 17px; }
+  .dec { color: var(--ink-dim); font-size: 15px; min-width: 2.2em; text-align: right; }
+  .count { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 30px; line-height: 1; color: var(--ink); margin-top: 4px; }
+  .small { font-size: 10px; letter-spacing: 0.26em; text-transform: uppercase; color: var(--ink-dim); }
+  #result { display: flex; align-items: baseline; justify-content: center; gap: 14px; margin-top: 4px; }
+  #rbits { font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: 34px; letter-spacing: 0.24em; transition: color .4s, opacity .4s; }
+  #rdec { font-size: 34px; color: var(--brass); min-width: 2.6em; text-align: left; transition: opacity .4s; }
+  #rbits.live { color: var(--ink-dim); }
+  #status { font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--ink-dim); min-height: 14px; }
+  button#demo {
+    pointer-events: auto; cursor: pointer;
+    font: 600 12px/1 "Iowan Old Style", Palatino, Georgia, serif; letter-spacing: 0.3em; text-transform: uppercase;
+    color: #1b1108; background: linear-gradient(#f0c877, #b8863a); border: 1px solid #f6d99a;
+    border-radius: 8px; padding: 11px 16px 10px 19px; box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  button#demo:hover { filter: brightness(1.08); }
+  button#demo.on { background: linear-gradient(#8fd0a2, #4c8f63); border-color: #bfe8c9; }
+  .hint { font-size: 11px; color: var(--ink-dim); letter-spacing: 0.06em; text-align: right; line-height: 1.5; }
+  @media (max-width: 640px) {
+    .row { font-size: 15px; } .bits { font-size: 14px; }
+    #rbits, #rdec { font-size: 24px; }
+    .count { font-size: 22px; }
+    .hint { display: none; }
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+<div class="vignette"></div>
+
+<div class="hud panel" id="tl">
+  <div class="title">Marble Adder</div>
+  <div class="sub">four bit binary adder &middot; marbles and toggles only</div>
+  <div class="row"><span class="lab">A</span><span class="bits" id="abits">0000</span><span class="dec" id="adec">0</span></div>
+  <div class="row"><span class="lab">B</span><span class="bits" id="bbits">0000</span><span class="dec" id="bdec">0</span></div>
+</div>
+
+<div class="hud panel" id="tr">
+  <div class="small">Marbles dropped</div>
+  <div class="count" id="count">00</div>
+</div>
+
+<div class="hud panel" id="bc">
+  <div id="status">ready</div>
+  <div id="result"><span id="rbits">00000</span><span id="rdec">&nbsp;</span></div>
+</div>
+
+<div class="hud" id="br">
+  <button id="demo" type="button">Demo</button>
+  <div class="hint">click the brass switches to set A and B<br>pull the RUN lever (or press space)</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ==========================================================================
+   Marble Adder
+   The sum is never computed in code. Marbles fall through brass rocker
+   toggles; every flip is caused by a marble landing on (or a clear ball
+   striking) a toggle. The readout is read back from the toggle states.
+   ========================================================================== */
+
+const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = t => t * t * (3 - 2 * t);
+const DEG = Math.PI / 180;
+
+/* ---------- physical constants ---------- */
+const G = 9.81;
+const R_GLASS = 0.0125;          // 25 mm glass marbles
+const R_BALL = 0.016;            // 32 mm steel clear ball
+const ROLL_K = 5 / 7;            // rolling solid sphere
+const ROLL_FRICTION = 0.16;      // m/s^2
+const BOARD_TILT = 5 * DEG;      // board leans back like an easel
+
+/* ---------- layout (board local, metres) ---------- */
+const ZT = 0.075;                // main track plane
+const ZF = ZT + 0.05;            // front plane (B row, clear lane)
+const NBITS = 5;
+const X = [0.36, 0.18, 0.0, -0.18, -0.36];   // toggle pivots, bit 0 on the right
+const Y = [0.86, 0.76, 0.66, 0.56, 0.46];
+const TILT = 15 * DEG;           // rocker tilt
+const CUP = V3(0.045, 0.014);    // marble centre resting in a cup (local, right cup)
+const LIP_X = 0.068;
+const FUN_OUT = 0.042;           // funnel outlet height above pivot
+const FUN_TOP = 0.064;
+const FUN_R = 0.026;
+
+const RAIL_SLOPE = 0.055;
+const LIFT_X = -0.775, LIFT_Y1 = 1.205, LIFT_AXIS_Z = ZT - 0.036;
+const yA = x => 1.19 - (x + 0.72) * RAIL_SLOPE;          // A rail marble line
+const yB = x => 1.062 - (0.455 - x) * RAIL_SLOPE;        // B rail marble line
+const SORT_X = 0.455, PARK_X = 0.548;
+const GUT_SLOPE = Math.tan(13 * DEG);
+const yG = x => 0.37 + (x + 0.275) * GUT_SLOPE;          // gutter marble line
+const TRIP_X = -0.497;
+const POCKET_DIP = 0.009;
+
+// clear lane: passes just above where each flag tip sits when its toggle holds a 1
+const LANE_DIR = V3(-0.18, -0.10, 0).normalize();
+const LANE_P0 = V3(X[0] - 0.0596, Y[0] + 0.0413, ZF);
+const laneY = x => LANE_P0.y + (x - LANE_P0.x) * (0.10 / 0.18);
+
+/* ---------- path: rounded polyline, arc length parameterised ---------- */
+class Path {
+  constructor(points) {
+    this.p = points;
+    this.L = new Float64Array(points.length);
+    for (let i = 1; i < points.length; i++) this.L[i] = this.L[i - 1] + points[i].distanceTo(points[i - 1]);
+    this.length = this.L[points.length - 1];
+  }
+  static fromWaypoints(wps, radius = 0.03, step = 0.004) {
+    const pts = [wps[0].clone()];
+    const n = wps.length;
+    let cur = wps[0].clone();
+    for (let i = 1; i < n; i++) {
+      const P = wps[i];
+      if (i === n - 1) { Path._lineTo(pts, cur, P, step); cur = P.clone(); break; }
+      const din = P.clone().sub(wps[i - 1]); const lin = din.length(); din.divideScalar(lin);
+      const dout = wps[i + 1].clone().sub(P); const lout = dout.length(); dout.divideScalar(lout);
+      const cosA = clamp(din.dot(dout), -1, 1);
+      const ang = Math.acos(cosA);
+      let t = ang < 1e-3 ? 0 : radius * Math.tan(ang / 2);
+      t = Math.min(t, lin * 0.5, lout * 0.5);
+      const a = P.clone().addScaledVector(din, -t), b = P.clone().addScaledVector(dout, t);
+      Path._lineTo(pts, cur, a, step);
+      if (t > 0) {
+        const segs = Math.max(2, Math.ceil((2 * t) / step));
+        for (let k = 1; k <= segs; k++) {
+          const u = k / segs, w = 1 - u;
+          pts.push(V3(
+            w * w * a.x + 2 * w * u * P.x + u * u * b.x,
+            w * w * a.y + 2 * w * u * P.y + u * u * b.y,
+            w * w * a.z + 2 * w * u * P.z + u * u * b.z));
+        }
+      }
+      cur = b.clone();
+    }
+    // drop duplicates
+    const out = [pts[0]];
+    for (let i = 1; i < pts.length; i++) if (pts[i].distanceTo(out[out.length - 1]) > 1e-5) out.push(pts[i]);
+    return new Path(out);
+  }
+  static _lineTo(pts, a, b, step) {
+    const d = a.distanceTo(b); const segs = Math.max(1, Math.ceil(d / step));
+    for (let k = 1; k <= segs; k++) pts.push(a.clone().lerp(b, k / segs));
+  }
+  _idx(s) {
+    const L = this.L; let lo = 0, hi = L.length - 1;
+    if (s <= 0) return 0; if (s >= this.length) return L.length - 2;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (L[m] <= s) lo = m; else hi = m; }
+    return lo;
+  }
+  pointAt(s, out = V3()) {
+    const i = this._idx(s); const seg = this.L[i + 1] - this.L[i];
+    const u = seg > 0 ? clamp((s - this.L[i]) / seg, 0, 1) : 0;
+    return out.copy(this.p[i]).lerp(this.p[i + 1], u);
+  }
+  tangentAt(s, out = V3()) {
+    const i = this._idx(s);
+    return out.copy(this.p[i + 1]).sub(this.p[i]).normalize();
+  }
+  closestS(q) {
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < this.p.length; i++) { const d = this.p[i].distanceToSquared(q); if (d < bd) { bd = d; best = this.L[i]; } }
+    return best;
+  }
+  get start() { return this.p[0]; }
+  get end() { return this.p[this.p.length - 1]; }
+}
+
+/* ---------- geometry helpers ---------- */
+function mergeGeometries(geos) {
+  let vCount = 0, iCount = 0;
+  const prepared = geos.map(g => { const gi = g.index ? g : indexify(g); vCount += gi.attributes.position.count; iCount += gi.index.count; return gi; });
+  const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3), uv = new Float32Array(vCount * 2);
+  const idx = vCount > 65535 ? new Uint32Array(iCount) : new Uint16Array(iCount);
+  let vo = 0, io = 0;
+  for (const g of prepared) {
+    const P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv;
+    pos.set(P.array, vo * 3);
+    if (N) nor.set(N.array, vo * 3);
+    if (U) uv.set(U.array, vo * 2);
+    const I = g.index.array;
+    for (let k = 0; k < I.length; k++) idx[io + k] = I[k] + vo;
+    vo += P.count; io += I.length;
+    g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  out.computeBoundingSphere();
+  return out;
+}
+function indexify(g) {
+  const n = g.attributes.position.count; const I = [];
+  for (let i = 0; i < n; i++) I.push(i);
+  g.setIndex(I); return g;
+}
+// tube along a list of points (polyline), used for rails, rods and wires
+function tubeAlong(points, radius, radial = 6, closed = false) {
+  const curve = new THREE.CatmullRomCurve3(points, closed, 'centripetal', 0.0);
+  let len = 0; for (let i = 1; i < points.length; i++) len += points[i].distanceTo(points[i - 1]);
+  const segs = Math.max(2, Math.min(400, Math.ceil(len / 0.006)));
+  return new THREE.TubeGeometry(curve, segs, radius, radial, closed);
+}
+function rodBetween(a, b, radius, radial = 8) {
+  const d = b.clone().sub(a); const len = d.length();
+  const g = new THREE.CylinderGeometry(radius, radius, len, radial, 1, false);
+  const q = new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), d.normalize());
+  g.applyQuaternion(q); const m = a.clone().add(b).multiplyScalar(0.5);
+  g.translate(m.x, m.y, m.z); return g;
+}
+function sphereAt(p, r, seg = 10) { const g = new THREE.SphereGeometry(r, seg, Math.max(6, seg >> 1)); g.translate(p.x, p.y, p.z); return g; }
+
+// frame along a path: tangent t, side b (horizontal-ish), down n
+function frameAt(path, s) {
+  const t = path.tangentAt(s);
+  const up = Math.abs(t.y) > 0.97 ? V3(0, 0, 1) : V3(0, 1, 0);
+  const b = V3().crossVectors(t, up).normalize();
+  const n = V3().crossVectors(b, t).normalize().negate(); // points "down" relative to track
+  return { t, b, n };
+}
+// two-rod rail under a marble path. spread: half distance between rods
+function railRods(path, marbleR, s0 = 0, s1 = path.length, opts = {}) {
+  const rodR = opts.rodR ?? 0.0022, spread = opts.spread ?? marbleR * 0.72;
+  const depth = Math.sqrt(Math.max(0, (marbleR + rodR) ** 2 - spread ** 2));
+  const L = [], Rr = []; const step = 0.006;
+  const n = Math.max(2, Math.ceil((s1 - s0) / step));
+  for (let i = 0; i <= n; i++) {
+    const s = lerp(s0, s1, i / n); const f = frameAt(path, s); const c = path.pointAt(s);
+    L.push(c.clone().addScaledVector(f.n, depth).addScaledVector(f.b, spread));
+    Rr.push(c.clone().addScaledVector(f.n, depth).addScaledVector(f.b, -spread));
+  }
+  return [tubeAlong(L, rodR), tubeAlong(Rr, rodR)];
+}
+// ties (little cross pieces) that hold the rods, with a standoff post back to the board
+function railTies(path, marbleR, s0, s1, every = 0.07, opts = {}) {
+  const out = []; const rodR = opts.rodR ?? 0.0022, spread = opts.spread ?? marbleR * 0.72;
+  const depth = Math.sqrt(Math.max(0, (marbleR + rodR) ** 2 - spread ** 2));
+  const count = Math.max(1, Math.floor((s1 - s0) / every));
+  for (let i = 0; i <= count; i++) {
+    const s = lerp(s0 + 0.01, s1 - 0.01, count ? i / count : 0.5); const f = frameAt(path, s); const c = path.pointAt(s);
+    const base = c.clone().addScaledVector(f.n, depth + 0.004);
+    const a = base.clone().addScaledVector(f.b, spread + 0.004), b = base.clone().addScaledVector(f.b, -spread - 0.004);
+    out.push(rodBetween(a, b, 0.0022, 6));
+    if (opts.posts !== false) {
+      const back = base.clone(); back.z = 0.002;
+      if (base.z - back.z > 0.01) out.push(rodBetween(base, back, 0.0024, 6));
+    }
+  }
+  return out;
+}
+// vertical cage of three rods (left, back, right) with open-front rings
+function cageRods(top, bottom, marbleR, opts = {}) {
+  const out = []; const rr = marbleR + 0.0045; const rodR = 0.0018;
+  const angles = opts.angles ?? [Math.PI, Math.PI * 1.5, 0];
+  for (const a of angles) {
+    const o = V3(Math.cos(a) * rr, 0, Math.sin(a) * rr);
+    out.push(rodBetween(top.clone().add(o), bottom.clone().add(o), rodR, 6));
+  }
+  const h = top.y - bottom.y; const rings = Math.max(1, Math.round(h / 0.09));
+  for (let i = 0; i <= rings; i++) {
+    const y = lerp(bottom.y + 0.01, top.y - 0.01, i / rings);
+    const tg = new THREE.TorusGeometry(rr, 0.0017, 5, 18, Math.PI * 1.25);
+    tg.rotateX(Math.PI / 2); tg.rotateY(-0.875 * Math.PI); tg.translate(top.x, y, top.z);
+    out.push(tg);
+  }
+  return out;
+}
+
+/* ---------- random ---------- */
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ==========================================================================
+   Renderer, scene, lighting
+   ========================================================================== */
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x000000, 0);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, window.innerWidth / window.innerHeight, 0.05, 30);
+camera.position.set(0.1, 1.05, 3.3);
+
+// procedural studio environment: warm softboxes in a dark room
+function buildEnvironment() {
+  const env = new THREE.Scene();
+  const room = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false,
+    vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'varying vec3 vP; void main(){ float h = vP.y; vec3 top = vec3(0.22,0.17,0.12); vec3 mid = vec3(0.11,0.08,0.055); vec3 bot = vec3(0.035,0.025,0.017); vec3 c = h > 0.0 ? mix(mid, top, h) : mix(mid, bot, -h); gl_FragColor = vec4(c, 1.0); }'
+  }));
+  env.add(room);
+  const box = (w, h, color, intensity, pos) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(intensity), side: THREE.DoubleSide }));
+    m.position.copy(pos); m.lookAt(0, 0.6, 0); env.add(m);
+  };
+  box(4.0, 3.0, 0xffd7a8, 5.0, V3(-4.5, 5.0, 5.5));   // key softbox
+  box(2.5, 5.0, 0xffe6c7, 1.6, V3(6.5, 2.5, 3.5));    // fill
+  box(8.0, 0.6, 0xfff1dd, 3.0, V3(0, 7.5, -2.0));     // top strip
+  box(1.2, 4.0, 0xffc98a, 2.2, V3(-7.0, 1.5, -3.0));  // warm kicker
+  box(6.0, 2.5, 0xfff0dc, 1.1, V3(0.5, 4.2, 8.0));    // soft front bounce, high so the board does not mirror it
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const rt = pmrem.fromScene(env, 0.035);
+  pmrem.dispose();
+  env.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  return rt.texture;
+}
+const envTex = buildEnvironment();
+scene.environment = envTex;
+
+const keyLight = new THREE.DirectionalLight(0xffd3a1, 3.3);
+keyLight.position.set(-1.6, 2.6, 2.4);
+keyLight.target.position.set(-0.02, 0.72, 0);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+Object.assign(keyLight.shadow.camera, { left: -1.05, right: 1.05, top: 1.0, bottom: -1.0, near: 1.0, far: 7.0 });
+keyLight.shadow.bias = -0.0004;
+keyLight.shadow.normalBias = 0.012;
+keyLight.shadow.radius = 3;
+scene.add(keyLight, keyLight.target);
+const hemi = new THREE.HemisphereLight(0xffe2c0, 0x2a1a10, 0.32);
+scene.add(hemi);
+const rim = new THREE.DirectionalLight(0xcfe0ff, 0.55);
+rim.position.set(2.2, 2.0, -1.4);
+scene.add(rim);
+const warmPool = new THREE.SpotLight(0xffb870, 7.0, 6, 32 * DEG, 0.75, 1.6);
+warmPool.position.set(1.4, 2.4, 2.2);
+warmPool.target.position.set(0.05, 0.75, 0);
+scene.add(warmPool, warmPool.target);
+
+/* ---------- materials ---------- */
+const MAT = {};
+function std(params) { const m = new THREE.MeshStandardMaterial(params); m.envMap = envTex; return m; }
+MAT.brass = std({ color: 0xd9a74c, metalness: 1, roughness: 0.3, envMapIntensity: 1.25 });
+MAT.brassRail = std({ color: 0xc3913f, metalness: 1, roughness: 0.34, envMapIntensity: 1.15 });
+MAT.brassBright = std({ color: 0xe8b95b, metalness: 1, roughness: 0.27, envMapIntensity: 1.45 });
+MAT.brassDark = std({ color: 0x8c6a33, metalness: 1, roughness: 0.42, envMapIntensity: 1.0 });
+MAT.steel = std({ color: 0xe9e9ee, metalness: 1, roughness: 0.1, envMapIntensity: 1.6 });
+MAT.blackEnamel = std({ color: 0x14100d, metalness: 0.0, roughness: 0.28, envMapIntensity: 1.0 });
+MAT.redEnamel = std({ color: 0xb4231a, metalness: 0.1, roughness: 0.32, envMapIntensity: 1.0 });
+MAT.ivory = std({ color: 0xf0e2c4, metalness: 0.0, roughness: 0.38, envMapIntensity: 0.8 });
+MAT.walnut = std({ color: 0x6a4428, metalness: 0.0, roughness: 0.55, envMapIntensity: 0.7 });
+MAT.walnutDark = std({ color: 0x3e2716, metalness: 0.0, roughness: 0.6, envMapIntensity: 0.6 });
+MAT.trough = std({ color: 0x7a5230, metalness: 0.0, roughness: 0.5, envMapIntensity: 0.8, side: THREE.DoubleSide });
+MAT.funnel = std({ color: 0xf0c56a, metalness: 0.85, roughness: 0.34, envMapIntensity: 1.9, side: THREE.DoubleSide });
+
+function glassMaterial(tint) {
+  const m = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, metalness: 0, roughness: 0.04, transmission: 1, thickness: 0.02, ior: 1.52,
+    attenuationColor: tint, attenuationDistance: 0.024, clearcoat: 1, clearcoatRoughness: 0.02,
+    specularIntensity: 1, envMapIntensity: 1.7,
+  });
+  m.envMap = envTex; m.userData.tint = tint.clone(); return m;
+}
+// cheaper stand-in used only if the machine cannot hold 60 fps with real transmission
+function fakeGlass(m) {
+  m.transmission = 0; m.transparent = true; m.opacity = 0.62; m.color.copy(m.userData.tint); m.envMapIntensity = 2.6;
+  m.depthWrite = false; m.needsUpdate = true;
+}
+
+/* ---------- procedural wood ---------- */
+function woodCanvas(w, h, pal, seed, grainDensity, warpAmt) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(w, h); const d = img.data;
+  const rnd = mulberry32(seed);
+  const N = 2048; const stripe = new Float32Array(N);
+  for (let i = 0; i < N; i++) stripe[i] = rnd();
+  for (let pass = 0; pass < 3; pass++) for (let i = 0; i < N; i++) stripe[i] = (stripe[(i + N - 1) % N] + stripe[i] * 2 + stripe[(i + 1) % N]) / 4;
+  const lo = Math.min(...stripe), hi = Math.max(...stripe);
+  for (let i = 0; i < N; i++) stripe[i] = (stripe[i] - lo) / (hi - lo);
+  const colW = new Float32Array(w); const ph1 = rnd() * 6.28, ph2 = rnd() * 6.28;
+  for (let x = 0; x < w; x++) colW[x] = Math.sin(x / w * 5.3 + ph1) * 0.6 + Math.sin(x / w * 13.1 + ph2) * 0.25;
+  const [b0, b1, b2] = pal.base, [g0, g1, g2] = pal.grain;
+  for (let y = 0; y < h; y++) {
+    const vy = y / h;
+    for (let x = 0; x < w; x++) {
+      const warp = (colW[x] + Math.sin(x * 0.0041 + vy * 9.0 + ph2) * 0.35) * warpAmt;
+      const gpos = (vy + warp) * grainDensity;
+      const fi = gpos - Math.floor(gpos); const idx = (Math.floor(gpos) % N + N) % N;
+      const sv = stripe[idx] * (1 - fi) + stripe[(idx + 1) % N] * fi;
+      let k = Math.pow(sv, 3.2) * 0.85 + (rnd() - 0.5) * 0.06;
+      k = clamp(k, 0, 1);
+      const o = (y * w + x) * 4;
+      d[o] = b0 + (g0 - b0) * k; d[o + 1] = b1 + (g1 - b1) * k; d[o + 2] = b2 + (g2 - b2) * k; d[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  // soft broad colour variation
+  for (let i = 0; i < 9; i++) {
+    const gx = rnd() * w, gy = rnd() * h, gr = (0.2 + rnd() * 0.4) * Math.max(w, h);
+    const grd = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+    const a = 0.05 + rnd() * 0.06;
+    grd.addColorStop(0, rnd() > 0.5 ? `rgba(255,236,200,${a})` : `rgba(120,70,30,${a})`);
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd; ctx.fillRect(0, 0, w, h);
+  }
+  return c;
+}
+
+/* ---------- board engravings (collected while building, baked into the board texture) ---------- */
+const ENGRAVE = [];
+const engraveText = (text, x, y, size, o = {}) => ENGRAVE.push({ kind: 'text', text, x, y, size, ...o });
+const engraveArc = (x, y, r, a0, a1, width = 0.0016) => ENGRAVE.push({ kind: 'arc', x, y, r, a0, a1, width });
+const engraveLine = (pts, width = 0.0016) => ENGRAVE.push({ kind: 'line', pts, width });
+const engraveDot = (x, y, r) => ENGRAVE.push({ kind: 'dot', x, y, r });
+
+const BX0 = -0.87, BX1 = 0.83, BY0 = 0.10, BY1 = 1.33;
+
+/* ==========================================================================
+   Machine layout: paths the marbles follow + static geometry
+   ========================================================================== */
+const board = new THREE.Group();          // everything mounted on the board lives in board space
+board.position.set(0, 0.06, 0);
+board.rotation.x = -BOARD_TILT;
+scene.add(board);
+
+const BUCKET = new Map();                 // material -> geometries to merge
+function put(mat, geo) { if (!BUCKET.has(mat)) BUCKET.set(mat, []); if (Array.isArray(geo)) BUCKET.get(mat).push(...geo); else BUCKET.get(mat).push(geo); }
+function flushBuckets() {
+  for (const [mat, geos] of BUCKET) {
+    if (!geos.length) continue;
+    const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    board.add(mesh);
+  }
+  BUCKET.clear();
+}
+
+const P = k => V3(X[k], Y[k], ZT);
+const rotZ = (v, a) => V3(v.x * Math.cos(a) - v.y * Math.sin(a), v.x * Math.sin(a) + v.y * Math.cos(a), v.z || 0);
+const tiltOf = st => (st ? -TILT : TILT);         // state 0 = left side down, state 1 = right side down
+const rel = (k, x, y, z = 0) => V3(X[k] + x, Y[k] + y, ZT + z);
+const funnelOut = k => rel(k, 0, FUN_OUT);
+
+const PATHS = {};
+const TRAY_START_X = -0.52;
+const TRAY_END = V3(LIFT_X, yG(TRAY_START_X) - (TRAY_START_X - LIFT_X) * Math.tan(5 * DEG), ZT);
+const LIFT_Y0 = TRAY_END.y;
+
+/* --- A rail (top, main plane): lift top -> pockets A8..A1 -> size sorter -> ball park --- */
+PATHS.A = Path.fromWaypoints([
+  V3(LIFT_X, LIFT_Y1, ZT), V3(LIFT_X + 0.028, yA(LIFT_X + 0.028) + 0.004, ZT), V3(-0.64, yA(-0.64), ZT), V3(PARK_X, yA(PARK_X), ZT)
+], 0.03);
+/* --- B rail (front plane): glass marbles drop through the sorter gap, roll right to left past B1..B8 --- */
+PATHS.B = Path.fromWaypoints([
+  V3(SORT_X, yA(SORT_X), ZT), V3(SORT_X, yA(SORT_X) - 0.03, ZT), V3(SORT_X - 0.006, yB(SORT_X) + 0.014, ZF),
+  V3(SORT_X - 0.05, yB(SORT_X - 0.05), ZF), V3(-0.245, yB(-0.245), ZF)
+], 0.022);
+PATHS.B_railStart = PATHS.B.closestS(V3(SORT_X - 0.035, yB(SORT_X - 0.035), ZF));
+
+/* --- pockets --- */
+const POCKETS = [];   // index: 0..3 = A bit0..3, 4..7 = B bit0..3
+for (let i = 0; i < 8; i++) {
+  const row = i < 4 ? 'A' : 'B', bit = i & 3;
+  const x = X[bit];
+  const railY = row === 'A' ? yA(x) : yB(x), z = row === 'A' ? ZT : ZF;
+  const rest = V3(x, railY - POCKET_DIP, z);
+  const path = row === 'A' ? PATHS.A : PATHS.B;
+  const s = path.closestS(V3(x, railY, z));
+  let drop;
+  if (row === 'A') drop = Path.fromWaypoints([rest, V3(x, Y[bit] + FUN_TOP + 0.012, ZT), funnelOut(bit)], 0.01);
+  else drop = Path.fromWaypoints([rest, V3(x, railY - 0.032, ZF), V3(x, railY - 0.078, ZT), V3(x, Y[bit] + FUN_TOP + 0.012, ZT), funnelOut(bit)], 0.016);
+  POCKETS.push({ i, row, bit, x, rest, path, s, drop, marble: null, reserved: false, gateOpen: 0, gateTarget: 0, sw: 0, swAnim: 0 });
+}
+PATHS.A_sortS = PATHS.A.closestS(V3(SORT_X, yA(SORT_X), ZT));
+
+/* --- clear ball: park -> hairpin -> lane in front of the toggles -> down into the gutter --- */
+const LANE_X1 = 0.625, LANE_X0 = -0.455;
+PATHS.clear = Path.fromWaypoints([
+  V3(PARK_X, yA(PARK_X) + 0.0042, ZT), V3(0.592, yA(0.592) + 0.002, ZT), V3(0.648, 1.098, ZT + 0.03), V3(0.646, laneY(0.646) + 0.004, ZF),
+  V3(LANE_X1 - 0.01, laneY(LANE_X1 - 0.01), ZF), V3(LANE_X0, laneY(LANE_X0), ZF),
+  V3(LANE_X0 - 0.026, laneY(LANE_X0) - 0.03, ZF - 0.005), V3(-0.49, yG(-0.49) + 0.05, ZT + 0.012), V3(-0.492, yG(-0.492) + 0.0035, ZT)
+], 0.03);
+PATHS.clearFlagS = [];
+for (let k = 0; k < NBITS; k++) {
+  const tipX = X[k] - 0.0596 + 0.011 * 0.874;
+  PATHS.clearFlagS.push(PATHS.clear.closestS(V3(tipX, laneY(tipX), ZF)));
+}
+PATHS.laneS0 = PATHS.clear.closestS(V3(LANE_X1 - 0.03, laneY(LANE_X1 - 0.03), ZF));
+PATHS.laneS1 = PATHS.clear.closestS(V3(LANE_X0, laneY(LANE_X0), ZF));
+
+/* --- gutter + tray to the lift --- */
+PATHS.gutter = Path.fromWaypoints([V3(0.475, yG(0.475), ZT), V3(TRAY_START_X, yG(TRAY_START_X), ZT), TRAY_END.clone()], 0.08);
+PATHS.tripS = PATHS.gutter.closestS(V3(-0.508, yG(-0.508), ZT));
+PATHS.clearJoinS = PATHS.gutter.closestS(V3(-0.492, yG(-0.492), ZT));
+
+/* --- per toggle: landing, done exit, carry exit --- */
+const TOG = [];
+for (let k = 0; k < NBITS; k++) {
+  const t = { k };
+  const cupHi0 = rotZ(CUP, TILT);                 // right cup while in state 0 (high side)
+  const cupHi1 = rotZ(V3(-CUP.x, CUP.y), -TILT);  // left cup while in state 1
+  t.land = [
+    Path.fromWaypoints([funnelOut(k), rel(k, 0.012, 0.037), rel(k, cupHi0.x, cupHi0.y)], 0.01),
+    Path.fromWaypoints([funnelOut(k), rel(k, -0.012, 0.037), rel(k, cupHi1.x, cupHi1.y)], 0.01)];
+  const lowR = rotZ(CUP, -TILT), lowL = rotZ(V3(-CUP.x, CUP.y), TILT);
+  const dx = 0.093, gx = X[k] + dx;
+  t.done = Path.fromWaypoints([rel(k, lowR.x, lowR.y), rel(k, 0.068, -0.001), rel(k, 0.086, -0.011), rel(k, dx, -0.032), V3(gx, yG(gx), ZT)], 0.012);
+  t.doneJoinS = PATHS.gutter.closestS(V3(gx, yG(gx), ZT));
+  if (k < NBITS - 1) {
+    t.carry = Path.fromWaypoints([rel(k, lowL.x, lowL.y), rel(k, -0.068, -0.001), rel(k, -0.08, -0.006), rel(k, -0.148, -0.024),
+      rel(k, -0.166, -0.036), funnelOut(k + 1)], 0.012);
+  } else {
+    t.carry = Path.fromWaypoints([rel(k, lowL.x, lowL.y), rel(k, -0.068, -0.001), rel(k, -0.09, -0.012), rel(k, -0.1, -0.06),
+      V3(X[k] - 0.1, yG(X[k] - 0.1), ZT)], 0.012);   // overflow (never used for 4 bit inputs)
+  }
+  TOG.push(t);
+}
+
+/* --- lift --- */
+const LIFT = { pitch: 0.08, revPerSec: 4.2, angle: 0, speed: 0, running: false, riders: [] };
+
+/* ==========================================================================
+   Static geometry
+   ========================================================================== */
+function buildStatic() {
+  const rodOpts = { rodR: 0.0022 };
+  // spread the A and B rail rods apart over each pocket and the sorter gap
+  const spreadFn = (path, centres) => s => {
+    let sp = R_GLASS * 0.72;
+    for (const c of centres) { const d = Math.abs(s - c); if (d < 0.03) sp = Math.max(sp, lerp(0.0155, R_GLASS * 0.72, smooth(clamp((d - 0.012) / 0.018, 0, 1)))); }
+    return sp;
+  };
+  const variableRail = (path, s0, s1, spreadAt, marbleR, mat) => {
+    const rodR = 0.0022; const L = [], Rr = []; const n = Math.max(2, Math.ceil((s1 - s0) / 0.004));
+    for (let i = 0; i <= n; i++) {
+      const s = lerp(s0, s1, i / n); const f = frameAt(path, s); const c = path.pointAt(s); const sp = spreadAt(s);
+      const depth = Math.sqrt(Math.max(0, (marbleR + rodR) ** 2 - sp ** 2));
+      L.push(c.clone().addScaledVector(f.n, depth).addScaledVector(f.b, sp));
+      Rr.push(c.clone().addScaledVector(f.n, depth).addScaledVector(f.b, -sp));
+    }
+    put(mat, [tubeAlong(L, rodR), tubeAlong(Rr, rodR)]);
+  };
+  // A rail
+  const aCentres = POCKETS.filter(p => p.row === 'A').map(p => p.s).concat([PATHS.A_sortS]);
+  const aStart = PATHS.A.closestS(V3(LIFT_X + 0.03, yA(LIFT_X + 0.03), ZT));
+  variableRail(PATHS.A, aStart, PATHS.A.length + 0.004, spreadFn(PATHS.A, aCentres), R_GLASS, MAT.brassRail);
+  put(MAT.brassDark, railTies(PATHS.A, R_GLASS, aStart + 0.02, PATHS.A.length - 0.01, 0.12));
+  // ball park end stop block
+  { const e = V3(PARK_X + R_BALL + 0.006, yA(PARK_X) - 0.004, ZT); const g = new THREE.BoxGeometry(0.008, 0.03, 0.03); g.translate(e.x + 0.02, e.y - 0.01, e.z); put(MAT.brassDark, g); }
+  // B rail
+  const bCentres = POCKETS.filter(p => p.row === 'B').map(p => p.s);
+  variableRail(PATHS.B, PATHS.B_railStart, PATHS.B.length, spreadFn(PATHS.B, bCentres), R_GLASS, MAT.brassRail);
+  put(MAT.brassDark, railTies(PATHS.B, R_GLASS, PATHS.B_railStart + 0.02, PATHS.B.length - 0.005, 0.12));
+  { const e = PATHS.B.end; const g = new THREE.BoxGeometry(0.006, 0.026, 0.03); g.translate(e.x - R_GLASS - 0.004, e.y + 0.002, e.z); put(MAT.brassDark, g); }
+  // sorter drop guide (front + back rods of the little chute)
+  { const sd = PATHS.B; const pts1 = [], pts2 = [];
+    for (let s = 0.004; s < PATHS.B_railStart; s += 0.004) { const f = frameAt(sd, s); const c = sd.pointAt(s); pts1.push(c.clone().addScaledVector(f.b, 0.0165).addScaledVector(f.n, 0.004)); pts2.push(c.clone().addScaledVector(f.b, -0.0165).addScaledVector(f.n, 0.004)); }
+    if (pts1.length > 2) put(MAT.brassRail, [tubeAlong(pts1, 0.0018), tubeAlong(pts2, 0.0018)]); }
+  // column cages and B chutes
+  for (const p of POCKETS) {
+    if (p.row === 'A') {
+      put(MAT.brassRail, cageRods(V3(p.x, p.rest.y - 0.016, ZT), V3(p.x, Y[p.bit] + FUN_TOP + 0.004, ZT), R_GLASS));
+      // gate hinge bracket
+    } else {
+      const d = p.drop; const s1 = d.closestS(V3(p.x, yB(p.x) - 0.078, ZT));
+      const L = [], Rr = [];
+      for (let s = 0.02; s <= s1; s += 0.004) { const f = frameAt(d, s); const c = d.pointAt(s); L.push(c.clone().addScaledVector(f.b, 0.0165)); Rr.push(c.clone().addScaledVector(f.b, -0.0165)); }
+      put(MAT.brassRail, [tubeAlong(L, 0.0018), tubeAlong(Rr, 0.0018)]);
+    }
+  }
+  // funnels
+  const funnelProfile = [V3(0.0152, 0), V3(0.0162, 0.006), V3(0.021, 0.014), V3(FUN_R, FUN_TOP - FUN_OUT), V3(FUN_R + 0.0015, FUN_TOP - FUN_OUT + 0.0015)].map(v => new THREE.Vector2(v.x, v.y));
+  for (let k = 0; k < NBITS; k++) {
+    const g = new THREE.LatheGeometry(funnelProfile, 28); g.translate(X[k], Y[k] + FUN_OUT - 0.006, ZT); put(MAT.funnel, g);
+    const ring = new THREE.TorusGeometry(FUN_R + 0.002, 0.0022, 6, 28); ring.rotateX(Math.PI / 2); ring.translate(X[k], Y[k] + FUN_TOP - 0.004, ZT); put(MAT.brassBright, ring);
+    // funnel bracket to the board
+    put(MAT.brassDark, rodBetween(V3(X[k], Y[k] + FUN_TOP - 0.01, ZT - FUN_R), V3(X[k], Y[k] + FUN_TOP - 0.01, 0.002), 0.003));
+    // pivot boss + standoff
+    put(MAT.brassDark, rodBetween(V3(X[k], Y[k], 0.001), V3(X[k], Y[k], ZT - 0.02), 0.006, 14));
+    { const g2 = new THREE.CylinderGeometry(0.014, 0.016, 0.006, 24); g2.rotateX(Math.PI / 2); g2.translate(X[k], Y[k], 0.003); put(MAT.brass, g2); }
+  }
+  // carry ramps and done chutes
+  for (let k = 0; k < NBITS; k++) {
+    const t = TOG[k];
+    if (k < NBITS - 1) {
+      const c = t.carry; const s0 = c.closestS(rel(k, -0.074, -0.003)), s1 = c.closestS(rel(k, -0.15, -0.024));
+      put(MAT.brassRail, railRods(c, R_GLASS, s0, s1, rodOpts));
+      put(MAT.brassDark, railTies(c, R_GLASS, s0 + 0.01, s1 - 0.005, 0.05));
+    }
+    const d = t.done; const s0 = d.closestS(rel(k, 0.074, -0.004)), s1 = d.closestS(rel(k, 0.092, -0.03));
+    put(MAT.brassRail, railRods(d, R_GLASS, s0, s1, rodOpts));
+    const gx = X[k] + 0.093;
+    if (Y[k] - 0.035 - yG(gx) > 0.03) put(MAT.brassRail, cageRods(V3(gx, Y[k] - 0.03, ZT), V3(gx, yG(gx) + 0.018, ZT), R_GLASS, { angles: [Math.PI, Math.PI * 1.5, 0] }));
+  }
+  // clear lane
+  {
+    const c = PATHS.clear; const s0 = c.closestS(V3(0.60, yA(0.60), ZT)) + 0.01;
+    put(MAT.brassRail, railRods(c, R_BALL, s0, PATHS.laneS1 + 0.02, { rodR: 0.0024, spread: R_BALL * 0.68 }));
+    put(MAT.brassDark, railTies(c, R_BALL, PATHS.laneS0, PATHS.laneS1, 0.11, { rodR: 0.0024, spread: R_BALL * 0.68 }));
+    // hairpin outer guard
+    const pts = []; for (let s = s0; s < PATHS.laneS0; s += 0.004) { const f = frameAt(c, s); pts.push(c.pointAt(s).addScaledVector(f.n, -R_BALL - 0.004)); }
+    if (pts.length > 2) put(MAT.brassRail, tubeAlong(pts, 0.0018));
+    // drop from lane into gutter: guard rods
+    const g1 = [], g2 = []; for (let s = PATHS.laneS1 + 0.01; s < c.length - 0.01; s += 0.004) { const f = frameAt(c, s); const p = c.pointAt(s); g1.push(p.clone().addScaledVector(f.b, R_BALL + 0.004)); g2.push(p.clone().addScaledVector(f.b, -R_BALL - 0.004)); }
+    if (g1.length > 2) put(MAT.brassRail, [tubeAlong(g1, 0.0018), tubeAlong(g2, 0.0018)]);
+  }
+  // gutter trough
+  {
+    const gpath = PATHS.gutter; const inner = R_GLASS + 0.0035; const segs = 14;
+    const pos = [], idx = [], uv = [];
+    const n = Math.ceil(gpath.length / 0.01);
+    for (let i = 0; i <= n; i++) {
+      const s = gpath.length * i / n; const f = frameAt(gpath, s); const c = gpath.pointAt(s);
+      for (let j = 0; j <= segs; j++) {
+        const a = Math.PI * (j / segs);                    // 0..pi across the bottom
+        const o = c.clone().addScaledVector(f.b, Math.cos(a) * inner * 1.18).addScaledVector(f.n, Math.sin(a) * inner);
+        pos.push(o.x, o.y, o.z); uv.push(s * 4, j / segs);
+      }
+    }
+    for (let i = 0; i < n; i++) for (let j = 0; j < segs; j++) { const a = i * (segs + 1) + j, b = a + segs + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+    put(MAT.trough, g);
+    // rolled brass lips along both edges
+    const e1 = [], e2 = []; for (let i = 0; i <= n; i++) { const s = gpath.length * i / n; const f = frameAt(gpath, s); const c = gpath.pointAt(s); e1.push(c.clone().addScaledVector(f.b, inner * 1.18)); e2.push(c.clone().addScaledVector(f.b, -inner * 1.18)); }
+    put(MAT.brass, [tubeAlong(e1, 0.0022), tubeAlong(e2, 0.0022)]);
+    // end cap and supports
+    const st = gpath.start; const cap = new THREE.CylinderGeometry(inner * 1.2, inner * 1.2, 0.004, 18, 1, false, 0, Math.PI); cap.rotateZ(Math.PI / 2); cap.rotateX(Math.PI); cap.translate(st.x + 0.004, st.y, st.z); put(MAT.brass, cap);
+    for (let i = 0; i <= 6; i++) { const s = lerp(0.03, gpath.length - 0.03, i / 6); const c = gpath.pointAt(s); const bot = c.clone(); bot.y -= inner; put(MAT.brassDark, rodBetween(V3(bot.x, bot.y, bot.z - 0.004), V3(bot.x, bot.y, 0.002), 0.0028)); }
+  }
+}
+
+/* ==========================================================================
+   Moving parts
+   ========================================================================== */
+const HIT = [];                               // click targets
+function hitBox(parent, w, h, d, pos, data) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ visible: false }));
+  m.position.copy(pos); m.userData = data; parent.add(m); HIT.push(m); return m;
+}
+function shadowed(o) { o.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } }); return o; }
+
+/* --- result toggles: brass rockers --- */
+function rockerShape() {
+  const s = new THREE.Shape();
+  const top = [[-0.069, 0.003], [-0.068, 0.0065], [-0.062, 0.0045], [-0.054, 0.0022], [-0.045, 0.0015], [-0.036, 0.0025], [-0.026, 0.0055], [-0.016, 0.0105],
+    [-0.008, 0.0175], [-0.003, 0.0245], [0, 0.027], [0.003, 0.0245], [0.008, 0.0175], [0.016, 0.0105], [0.026, 0.0055], [0.036, 0.0025],
+    [0.045, 0.0015], [0.054, 0.0022], [0.062, 0.0045], [0.068, 0.0065], [0.069, 0.003]];
+  const bot = [[0.064, -0.002], [0.05, -0.005], [0.02, -0.0065], [0.012, -0.0075], [0.0085, -0.0115], [0, -0.0145], [-0.0085, -0.0115], [-0.012, -0.0075],
+    [-0.02, -0.0065], [-0.05, -0.005], [-0.064, -0.002]];
+  s.moveTo(top[0][0], top[0][1]);
+  for (let i = 1; i < top.length; i++) s.lineTo(top[i][0], top[i][1]);
+  for (const p of bot) s.lineTo(p[0], p[1]);
+  s.closePath();
+  return s;
+}
+const TOGGLES = [];
+{
+  const bodyGeo = new THREE.ExtrudeGeometry(rockerShape(), { depth: 0.024, bevelEnabled: true, bevelThickness: 0.0012, bevelSize: 0.0009, bevelSegments: 2, curveSegments: 4 });
+  bodyGeo.translate(0, 0, -0.012);
+  const hubGeo = new THREE.CylinderGeometry(0.0075, 0.0075, 0.034, 20); hubGeo.rotateX(Math.PI / 2);
+  const capGeo = new THREE.CylinderGeometry(0.0095, 0.0095, 0.003, 20); capGeo.rotateX(Math.PI / 2); capGeo.translate(0, 0, 0.0175);
+  const needleGeo = new THREE.CylinderGeometry(0.0009, 0.0018, 0.034, 8); needleGeo.translate(0, -0.03, 0.0145);
+  const tipGeo = new THREE.ConeGeometry(0.0026, 0.007, 10); tipGeo.rotateZ(Math.PI); tipGeo.translate(0, -0.05, 0.0145);
+  const bracketGeo = rodBetween(V3(-0.058, 0.0, 0.011), V3(-0.062, 0.0, ZF - ZT + 0.0), 0.0016, 8);
+  const vaneGeo = new THREE.BoxGeometry(0.009, 0.02, 0.0026); vaneGeo.translate(-0.062, 0.008, ZF - ZT);
+  const rivetGeo = new THREE.SphereGeometry(0.0022, 10, 8);
+  for (let k = 0; k < NBITS; k++) {
+    const g = new THREE.Group(); g.position.copy(P(k)); g.rotation.z = TILT;
+    g.add(new THREE.Mesh(bodyGeo, MAT.brassBright));
+    g.add(new THREE.Mesh(hubGeo, MAT.brassDark));
+    g.add(new THREE.Mesh(capGeo, MAT.brassBright));
+    g.add(new THREE.Mesh(needleGeo, MAT.blackEnamel));
+    g.add(new THREE.Mesh(tipGeo, MAT.redEnamel));
+    g.add(new THREE.Mesh(bracketGeo, MAT.brass));
+    g.add(new THREE.Mesh(vaneGeo, MAT.redEnamel));
+    for (const rx of [-0.03, 0.03]) { const rv = new THREE.Mesh(rivetGeo, MAT.brassDark); rv.position.set(rx, 0.0005, 0.0125); rv.scale.z = 0.5; g.add(rv); }
+    board.add(shadowed(g));
+    TOGGLES.push({ k, group: g, state: 0, phi: TILT, anim: null, glow: 0 });
+    // brass shroud in front of the flag: the red flag only shows above it when the toggle holds a 1
+    { const cv = new THREE.CylinderGeometry(0.0165, 0.0165, 0.003, 28); cv.rotateX(Math.PI / 2); cv.translate(X[k] - 0.061, Y[k] - 0.0085, ZF + 0.0055); put(MAT.brassBright, cv);
+      const rim = new THREE.TorusGeometry(0.0165, 0.0012, 6, 28); rim.translate(X[k] - 0.061, Y[k] - 0.0085, ZF + 0.007); put(MAT.brassDark, rim);
+      put(MAT.brassDark, rodBetween(V3(X[k] - 0.061, Y[k] - 0.02, ZF + 0.004), V3(X[k] - 0.061, Y[k] - 0.02, 0.002), 0.0022, 8)); }
+    // engraved dial below each toggle: 1 on the left, 0 on the right
+    engraveArc(X[k], Y[k], 0.056, -90 - 24, -90 + 24, 0.0014);
+    engraveText('1', X[k] - 0.03, Y[k] - 0.062, 0.016, { weight: 700 });
+    engraveText('0', X[k] + 0.03, Y[k] - 0.062, 0.016, { weight: 700 });
+    engraveText(String(1 << k), X[k], Y[k] - 0.092, 0.019, { weight: 700 });
+  }
+}
+
+/* --- pocket gates, input switches --- */
+const switchPlateTex = (() => {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 160; const x = c.getContext('2d');
+  const grd = x.createLinearGradient(0, 0, 128, 160); grd.addColorStop(0, '#caa057'); grd.addColorStop(1, '#9c7334');
+  x.fillStyle = grd; x.fillRect(0, 0, 128, 160);
+  x.strokeStyle = 'rgba(60,35,10,0.8)'; x.lineWidth = 4; x.strokeRect(5, 5, 118, 150);
+  x.fillStyle = '#2a1706'; x.font = '700 44px Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('1', 92, 42); x.fillText('0', 92, 120);
+  x.beginPath(); x.arc(40, 80, 7, 0, Math.PI * 2); x.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
+})();
+const switchPlateMat = std({ map: switchPlateTex, metalness: 0.75, roughness: 0.38, envMapIntensity: 1.0 });
+{
+  const plateGeo = new THREE.PlaneGeometry(0.036, 0.045);
+  const baseGeo = new THREE.CylinderGeometry(0.008, 0.009, 0.006, 18); baseGeo.rotateX(Math.PI / 2);
+  const leverGeo = new THREE.CylinderGeometry(0.0022, 0.0026, 0.026, 10); leverGeo.rotateZ(-Math.PI / 2); leverGeo.translate(0.013, 0, 0.005);
+  const knobGeo = new THREE.SphereGeometry(0.0052, 14, 10); knobGeo.translate(0.027, 0, 0.005);
+  const flapGeo = new THREE.BoxGeometry(0.024, 0.0026, 0.026); flapGeo.translate(-0.012, 0, 0);
+  const hingeGeo = new THREE.CylinderGeometry(0.0022, 0.0022, 0.03, 8); hingeGeo.rotateX(Math.PI / 2);
+  for (const p of POCKETS) {
+    const z = p.rest.z;
+    // gate flap under the pocket, hinged on its right edge
+    const gate = new THREE.Group(); gate.position.set(p.x + 0.012, p.rest.y - R_GLASS - 0.0016, z);
+    gate.add(new THREE.Mesh(flapGeo, MAT.brass)); gate.add(new THREE.Mesh(hingeGeo, MAT.brassDark));
+    board.add(shadowed(gate)); p.gate = gate;
+    // switch: lever on a brass plate, right of the pocket
+    const sp = V3(p.x + 0.036, p.rest.y - 0.03, z + 0.004);
+    const plate = new THREE.Mesh(plateGeo, switchPlateMat); plate.position.set(sp.x + 0.008, sp.y, sp.z - 0.004); plate.receiveShadow = true; board.add(plate);
+    const sw = new THREE.Group(); sw.position.copy(sp);
+    sw.add(new THREE.Mesh(baseGeo, MAT.brassDark));
+    const arm = new THREE.Group(); arm.add(new THREE.Mesh(leverGeo, MAT.brassBright)); arm.add(new THREE.Mesh(knobGeo, MAT.ivory));
+    sw.add(arm); board.add(shadowed(sw));
+    p.swArm = arm; p.swPos = sp;
+    // linkage from switch to gate latch
+    put(MAT.brassDark, rodBetween(V3(sp.x - 0.004, sp.y + 0.004, z - 0.002), V3(p.x + 0.012, p.rest.y - R_GLASS - 0.004, z - 0.002), 0.0012, 6));
+    // standoff behind the plate
+    put(MAT.brassDark, rodBetween(V3(sp.x + 0.008, sp.y, 0.002), V3(sp.x + 0.008, sp.y, sp.z - 0.005), 0.003, 8));
+    hitBox(board, 0.06, 0.06, 0.05, V3(sp.x + 0.01, sp.y, sp.z), { type: 'switch', pocket: p.i });
+  }
+  // row labels + weights
+  engraveText('A', X[3] - 0.105, yA(X[3]) - 0.012, 0.056, { weight: 700 });
+  engraveText('B', X[3] - 0.105, yB(X[3]) - 0.045, 0.056, { weight: 700 });
+  for (let k = 0; k < 4; k++) engraveText(String(1 << k), X[k], yA(X[k]) + 0.045, 0.02, { weight: 700 });
+  engraveText('INPUT', X[3] - 0.105, yA(X[3]) + 0.045, 0.014, { spacing: 0.25 });
+}
+
+/* --- park gate (holds the clear ball) and the RUN lever --- */
+const PARKGATE = { open: 0, target: 0 };
+{
+  const g = new THREE.Group(); g.position.set(PARK_X + R_BALL + 0.0035, yA(PARK_X) + 0.004, ZT);
+  const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.0032, 0.0032, 0.03, 12), MAT.brassBright); pin.rotation.x = Math.PI / 2;
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.05, 0.006), MAT.brassDark); post.position.set(0, 0.024, -0.016);
+  g.add(pin, post); board.add(shadowed(g)); PARKGATE.group = g; PARKGATE.base = g.position.clone();
+}
+const LEVER = { angle: 0, target: 0, pullT: -1 };
+const LEVER_PIVOT = V3(0.712, 0.955, ZT + 0.012);
+{
+  const g = new THREE.Group(); g.position.copy(LEVER_PIVOT);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.21, 0.008), MAT.brassBright); bar.position.y = 0.105;
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.013, 0.05, 20), MAT.blackEnamel); grip.position.y = 0.232;
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.017, 24, 16), MAT.blackEnamel); knob.position.y = 0.262;
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.02, 24), MAT.brass); hub.rotation.x = Math.PI / 2;
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.05, 0.007), MAT.brassBright); tail.position.y = -0.022;
+  g.add(bar, grip, knob, hub, tail);
+  board.add(shadowed(g)); LEVER.group = g;
+  // mounting plate behind the pivot
+  { const g2 = new THREE.CylinderGeometry(0.03, 0.032, 0.006, 32); g2.rotateX(Math.PI / 2); g2.translate(LEVER_PIVOT.x, LEVER_PIVOT.y, 0.003); put(MAT.brass, g2);
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; const sc = new THREE.CylinderGeometry(0.0035, 0.0035, 0.004, 10); sc.rotateX(Math.PI / 2); sc.translate(LEVER_PIVOT.x + Math.cos(a) * 0.022, LEVER_PIVOT.y + Math.sin(a) * 0.022, 0.007); put(MAT.brassBright, sc); } }
+  put(MAT.brassDark, rodBetween(V3(LEVER_PIVOT.x, LEVER_PIVOT.y, 0.002), V3(LEVER_PIVOT.x, LEVER_PIVOT.y, LEVER_PIVOT.z), 0.006, 14));
+  hitBox(g, 0.08, 0.3, 0.08, V3(0, 0.15, 0), { type: 'lever' });
+  // connecting rod from the lever tail to the park gate
+  LEVER.rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0017, 0.0017, 1, 8), MAT.brass); LEVER.rod.castShadow = true; board.add(LEVER.rod);
+  engraveText('RUN', LEVER_PIVOT.x - 0.004, LEVER_PIVOT.y - 0.068, 0.042, { weight: 700, spacing: 0.12 });
+  engraveText('PULL', LEVER_PIVOT.x + 0.085, LEVER_PIVOT.y + 0.075, 0.013, { spacing: 0.3, rot: -62 });
+  engraveArc(LEVER_PIVOT.x, LEVER_PIVOT.y, 0.118, 20, 78, 0.0016);
+}
+function placeRod(mesh, a, b) {
+  const d = b.clone().sub(a); const len = d.length();
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(V3(0, 1, 0), d.normalize());
+  mesh.scale.set(1, len, 1);
+}
+
+/* --- sequencer: marble-tripped program wheel --- */
+const SEQ_C = V3(-0.545, 0.905, 0.02);
+const SEQ_STEP = 40 * DEG;
+const SEQ = { step: 0, angle: 0, target: 0, mode: 'idle', pending: false, releaseAt: -1 };
+{
+  const g = new THREE.Group(); g.position.copy(SEQ_C);
+  const teeth = 36; const s = new THREE.Shape();
+  for (let i = 0; i <= teeth * 2; i++) { const a = (i / (teeth * 2)) * Math.PI * 2; const r = i % 2 ? 0.047 : 0.052; const x = Math.cos(a) * r, y = Math.sin(a) * r; if (i === 0) s.moveTo(x, y); else s.lineTo(x, y); }
+  const hole = new THREE.Path(); hole.absarc(0, 0, 0.03, 0, Math.PI * 2, true); s.holes.push(hole);
+  const wheel = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 0.005, bevelEnabled: false }), MAT.brass);
+  const spokes = new THREE.Group();
+  for (let i = 0; i < 3; i++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.006, 0.004), MAT.brass); sp.rotation.z = i * Math.PI / 3; sp.position.z = 0.0025; spokes.add(sp); }
+  const pointer = new THREE.Mesh(new THREE.BoxGeometry(0.0045, 0.085, 0.003), MAT.blackEnamel); pointer.position.set(0, 0.0425, 0.009);
+  const ptip = new THREE.Mesh(new THREE.ConeGeometry(0.006, 0.014, 3), MAT.redEnamel); ptip.position.set(0, 0.09, 0.009);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.016, 20), MAT.brassBright); hub.rotation.x = Math.PI / 2; hub.position.z = 0.006;
+  g.add(wheel, spokes, pointer, ptip, hub);
+  board.add(shadowed(g)); SEQ.group = g;
+  const labels = ['CLR', 'A1', 'A2', 'A4', 'A8', 'B1', 'B2', 'B4', 'B8'];
+  for (let i = 0; i < 9; i++) {
+    const a = Math.PI / 2 - i * SEQ_STEP;
+    engraveText(labels[i], SEQ_C.x + Math.cos(a) * 0.112, SEQ_C.y + Math.sin(a) * 0.112, 0.015, { weight: 700 });
+    engraveLine([[SEQ_C.x + Math.cos(a) * 0.094, SEQ_C.y + Math.sin(a) * 0.094], [SEQ_C.x + Math.cos(a) * 0.1, SEQ_C.y + Math.sin(a) * 0.1]], 0.0018);
+  }
+  engraveArc(SEQ_C.x, SEQ_C.y, 0.097, -330, 90, 0.0012);
+  engraveText('PROGRAM', SEQ_C.x, SEQ_C.y - 0.148, 0.016, { spacing: 0.3 });
+  // pawl
+  const pawl = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.006, 0.005), MAT.brassBright); pawl.position.set(SEQ_C.x + 0.036, SEQ_C.y - 0.06, 0.028);
+  pawl.rotation.z = 0.5; board.add(shadowed(pawl)); SEQ.pawl = pawl;
+}
+
+/* --- trip lever in the gutter + push rod up to the program wheel --- */
+const TRIP = { t: 1, pos: PATHS.gutter.pointAt(PATHS.tripS) };
+{
+  const g = new THREE.Group(); g.position.set(TRIP.pos.x, TRIP.pos.y - R_GLASS - 0.004, ZT - 0.02);
+  const paddle = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.018, 0.006), MAT.brassBright); paddle.position.set(0, 0.008, 0.02);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.004, 0.03), MAT.brassDark); arm.position.set(0, 0, 0.005);
+  g.add(paddle, arm); board.add(shadowed(g)); TRIP.group = g;
+  TRIP.rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 1, 8), MAT.brass); TRIP.rod.castShadow = true; board.add(TRIP.rod);
+  TRIP.rodBottom = V3(TRIP.pos.x - 0.004, TRIP.pos.y - 0.01, 0.03);
+  TRIP.rodTop = V3(SEQ_C.x + 0.05, SEQ_C.y - 0.064, 0.03);
+  for (const yy of [0.45, 0.62, 0.78]) {   // guides
+    const gx = lerp(TRIP.rodBottom.x, TRIP.rodTop.x, (yy - TRIP.rodBottom.y) / (TRIP.rodTop.y - TRIP.rodBottom.y));
+    const r = new THREE.TorusGeometry(0.004, 0.0015, 6, 12); r.rotateX(Math.PI / 2); r.translate(gx, yy, 0.03); put(MAT.brassDark, r);
+    put(MAT.brassDark, rodBetween(V3(gx, yy, 0.026), V3(gx, yy, 0.002), 0.0016, 6));
+  }
+}
+
+/* --- screw lift --- */
+{
+  const g = new THREE.Group(); g.position.set(LIFT_X, 0, LIFT_AXIS_Z);
+  const turns = (LIFT_Y1 - LIFT_Y0 + 0.03) / LIFT.pitch; const pts = []; const R = ZT - LIFT_AXIS_Z;
+  const n = Math.ceil(turns * 40);
+  for (let i = 0; i <= n; i++) { const a = (i / n) * turns * Math.PI * 2; pts.push(V3(Math.sin(a) * R, LIFT_Y0 - R_GLASS - 0.004 + (i / n) * turns * LIFT.pitch, Math.cos(a) * R)); }
+  const helix = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n, 0.0032, 6, false), MAT.brassBright);
+  const axis = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, LIFT_Y1 - LIFT_Y0 + 0.08, 16), MAT.brassDark); axis.position.y = (LIFT_Y0 + LIFT_Y1) / 2;
+  const screw = new THREE.Group(); screw.add(helix, axis);
+  // spokes tying helix to axis every half turn
+  for (let i = 0; i <= Math.floor(turns * 2); i++) {
+    const a = i * Math.PI; const y = LIFT_Y0 - R_GLASS - 0.004 + (i / 2) * LIFT.pitch;
+    const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.0016, 0.0016, R, 6), MAT.brass); sp.rotation.z = Math.PI / 2; sp.rotation.y = a + Math.PI / 2; sp.position.set(Math.sin(a) * R / 2, y, Math.cos(a) * R / 2); screw.add(sp);
+  }
+  g.add(screw); LIFT.screw = screw;
+  // bearings + motor housing
+  const bearing = (y) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.012, 20), MAT.brass); b.position.y = y; g.add(b); };
+  bearing(LIFT_Y0 - 0.035); bearing(LIFT_Y1 + 0.03);
+  const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.07, 28), MAT.walnutDark); motor.position.y = LIFT_Y1 + 0.075; g.add(motor);
+  const motorCap = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.008, 28), MAT.brassBright); motorCap.position.y = LIFT_Y1 + 0.113; g.add(motorCap);
+  const motorBand = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.006, 28), MAT.brass); motorBand.position.y = LIFT_Y1 + 0.043; g.add(motorBand);
+  board.add(shadowed(g));
+  // guide rods that stop the marbles turning with the screw
+  for (const dx of [-0.0155, 0.0155]) put(MAT.brassRail, rodBetween(V3(LIFT_X + dx, LIFT_Y0 - 0.01, ZT + 0.0075), V3(LIFT_X + dx, LIFT_Y1 + 0.005, ZT + 0.0075), 0.0019, 6));
+  for (const yy of [LIFT_Y0 - 0.035, LIFT_Y1 + 0.03]) put(MAT.brassDark, rodBetween(V3(LIFT_X, yy, LIFT_AXIS_Z - 0.01), V3(LIFT_X, yy, 0.002), 0.005, 10));
+  for (let yy = LIFT_Y0 + 0.08; yy < LIFT_Y1; yy += 0.2) put(MAT.brassDark, [rodBetween(V3(LIFT_X - 0.0155, yy, ZT + 0.0075), V3(LIFT_X - 0.03, yy, 0.002), 0.0016, 6), rodBetween(V3(LIFT_X + 0.0155, yy, ZT + 0.0075), V3(LIFT_X + 0.03, yy, 0.002), 0.0016, 6)]);
+  engraveText('LIFT', LIFT_X + 0.058, (LIFT_Y0 + LIFT_Y1) / 2, 0.016, { spacing: 0.5, rot: 90 });
+}
+
+/* --- odometer counter: marbles dropped --- */
+const COUNTER = { value: 0, wheels: [], angles: [0, 0], targets: [0, 0] };
+const COUNTER_C = V3(0.585, 0.235, 0.0);
+{
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 128; const x = c.getContext('2d');
+  x.fillStyle = '#f1e7d2'; x.fillRect(0, 0, 1024, 128);
+  x.fillStyle = '#16100a'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  for (let d = 0; d < 10; d++) {
+    x.save(); x.translate((d + 0.5) * 102.4, 64); x.rotate(Math.PI / 2); x.scale(0.62, 1.0);
+    x.font = '700 92px Georgia, serif'; x.fillText(String(d), 0, 6); x.restore();
+  }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+  const wheelMat = std({ map: tex, roughness: 0.45, metalness: 0.0, envMapIntensity: 0.6 });
+  const wg = new THREE.CylinderGeometry(0.017, 0.017, 0.021, 40, 1, false); wg.rotateZ(Math.PI / 2);
+  for (let i = 0; i < 2; i++) {
+    const w = new THREE.Mesh(wg, [wheelMat, MAT.brassDark, MAT.brassDark]);
+    w.position.set(COUNTER_C.x + (i ? 0.0125 : -0.0125), COUNTER_C.y, 0.03);
+    board.add(shadowed(w)); COUNTER.wheels.push(w);
+  }
+  // housing with a window
+  const H = (w, h, d, x, y, z) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); put(MAT.brass, g); };
+  H(0.078, 0.012, 0.05, COUNTER_C.x, COUNTER_C.y + 0.018, 0.025);
+  H(0.078, 0.012, 0.05, COUNTER_C.x, COUNTER_C.y - 0.018, 0.025);
+  H(0.012, 0.048, 0.05, COUNTER_C.x - 0.033, COUNTER_C.y, 0.025);
+  H(0.012, 0.048, 0.05, COUNTER_C.x + 0.033, COUNTER_C.y, 0.025);
+  H(0.004, 0.026, 0.044, COUNTER_C.x, COUNTER_C.y, 0.022);
+  engraveText('MARBLES DROPPED', COUNTER_C.x, COUNTER_C.y + 0.048, 0.0135, { spacing: 0.22 });
+}
+function setCounterTarget(n) {
+  // odometer: tens and units wheels roll to the digits of n (display only)
+  const s = String(n).padStart(2, '0');
+  for (let i = 0; i < 2; i++) {
+    const d = +s[i]; const want = (d + 0.5) / 10 * Math.PI * 2;
+    let cur = COUNTER.targets[i]; let delta = ((want - cur) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    COUNTER.targets[i] = cur + delta;
+  }
+}
+COUNTER.angles = [(0.5 / 10) * Math.PI * 2, (0.5 / 10) * Math.PI * 2];
+COUNTER.targets = COUNTER.angles.slice();
+
+/* --- more engravings --- */
+engraveText('BINARY MARBLE ADDER', -0.08, 0.232, 0.044, { weight: 700, spacing: 0.16 });
+engraveText('FOUR BIT  +  FOUR BIT   ·   FIVE FLIP FLOPS   ·   NINE MARBLES', -0.08, 0.182, 0.0145, { spacing: 0.2 });
+engraveLine([[-0.5, 0.206], [0.34, 0.206]], 0.0012);
+engraveText('RESULT', X[4] - 0.005, Y[4] + 0.165, 0.02, { weight: 700, spacing: 0.3 });
+engraveText('most significant bit on the left', X[4] - 0.005, Y[4] + 0.14, 0.0115, { italic: true });
+engraveText('CLEAR', 0.505, laneY(0.505) + 0.058, 0.0145, { spacing: 0.35, rot: 29 });
+engraveText('RETURN TRAY', (TRAY_START_X + LIFT_X) / 2 + 0.02, TRAY_END.y - 0.052, 0.0125, { spacing: 0.25, rot: 3.5 });
+engraveText('SIZE SORTER', SORT_X, yA(SORT_X) + 0.043, 0.0105, { spacing: 0.2 });
+engraveText('No. 01', 0.735, 0.13, 0.011, { spacing: 0.2 });
+
+/* ==========================================================================
+   Board, frame, stand, floor
+   ========================================================================== */
+function bakeBoardTexture() {
+  const W = 2048, H = Math.round(W * (BY1 - BY0) / (BX1 - BX0));
+  const c = woodCanvas(W, H, { base: [198, 152, 102], grain: [146, 100, 60] }, 11, 640, 0.012);
+  const ctx = c.getContext('2d');
+  const sx = W / (BX1 - BX0);
+  const px = (x, y) => [(x - BX0) * sx, (BY1 - y) * sx];
+  const ink = 'rgba(48, 22, 8, 0.92)';
+  ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineCap = 'round';
+  ctx.shadowColor = 'rgba(40, 18, 4, 0.55)'; ctx.shadowBlur = 2.5;
+  // border
+  ctx.lineWidth = 0.0018 * sx; const m = 0.022 * sx;
+  ctx.strokeRect(m, m, W - 2 * m, H - 2 * m);
+  ctx.lineWidth = 0.0008 * sx; const m2 = 0.028 * sx; ctx.strokeRect(m2, m2, W - 2 * m2, H - 2 * m2);
+  for (const e of ENGRAVE) {
+    if (e.kind === 'text') {
+      const [x, y] = px(e.x, e.y); const size = e.size * sx;
+      ctx.save(); ctx.translate(x, y); if (e.rot) ctx.rotate(-e.rot * DEG);
+      ctx.font = `${e.italic ? 'italic ' : ''}${e.weight || 400} ${size.toFixed(1)}px Georgia, "Times New Roman", serif`;
+      if ('letterSpacing' in ctx) ctx.letterSpacing = `${((e.spacing || 0) * size).toFixed(1)}px`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(e.text, 0, 0); ctx.restore();
+    } else if (e.kind === 'arc') {
+      const [x, y] = px(e.x, e.y); ctx.lineWidth = e.width * sx; ctx.beginPath();
+      ctx.arc(x, y, e.r * sx, -e.a0 * DEG, -e.a1 * DEG, true); ctx.stroke();
+    } else if (e.kind === 'line') {
+      ctx.lineWidth = e.width * sx; ctx.beginPath();
+      e.pts.forEach((p, i) => { const [x, y] = px(p[0], p[1]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke();
+    } else if (e.kind === 'dot') {
+      const [x, y] = px(e.x, e.y); ctx.beginPath(); ctx.arc(x, y, e.r * sx, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const bump = new THREE.CanvasTexture(c); bump.anisotropy = 4;
+  return { tex, bump };
+}
+function buildBoardAndStand() {
+  const { tex, bump } = bakeBoardTexture();
+  const bw = BX1 - BX0, bh = BY1 - BY0, cx = (BX0 + BX1) / 2, cy = (BY0 + BY1) / 2;
+  const face = std({ map: tex, bumpMap: bump, bumpScale: 0.6, roughness: 0.72, metalness: 0, envMapIntensity: 0.32 });
+  const edge = MAT.walnut;
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.018), [edge, edge, edge, edge, face, edge]);
+  slab.position.set(cx, cy, -0.009); slab.receiveShadow = true; slab.castShadow = true; board.add(slab);
+  // walnut frame
+  const fw = 0.045, fd = 0.05, fz = -0.018 + fd / 2;
+  const fr = (w, h, x, y) => { const g = new THREE.BoxGeometry(w, h, fd); g.translate(x, y, fz); put(MAT.walnut, g); };
+  fr(bw + 2 * fw, fw, cx, BY1 + fw / 2); fr(bw + 2 * fw, fw, cx, BY0 - fw / 2);
+  fr(fw, bh, BX0 - fw / 2, cy); fr(fw, bh, BX1 + fw / 2, cy);
+  // brass corner plates
+  for (const [x, y] of [[BX0 - fw / 2, BY1 + fw / 2], [BX1 + fw / 2, BY1 + fw / 2], [BX0 - fw / 2, BY0 - fw / 2], [BX1 + fw / 2, BY0 - fw / 2]]) {
+    const g = new THREE.BoxGeometry(fw * 0.9, fw * 0.9, 0.003); g.translate(x, y, fz + fd / 2 + 0.0015); put(MAT.brassDark, g);
+    const sc = new THREE.CylinderGeometry(0.004, 0.004, 0.004, 12); sc.rotateX(Math.PI / 2); sc.translate(x, y, fz + fd / 2 + 0.004); put(MAT.brassBright, sc);
+  }
+  // stand (world space, not tilted)
+  const stand = new THREE.Group(); scene.add(stand);
+  const footMat = MAT.walnutDark;
+  for (const x of [-0.62, 0.58]) {
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.42), footMat); foot.position.set(x, 0.025, -0.08); stand.add(foot);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.05), footMat); post.position.set(x, 0.12, -0.015); stand.add(post);
+    const strut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.95, 0.04), footMat); strut.position.set(x, 0.5, -0.2); strut.rotation.x = -0.24; stand.add(strut);
+  }
+  shadowed(stand);
+  // floor: warm dark tabletop fading into the backdrop
+  const fc = document.createElement('canvas'); fc.width = fc.height = 256; const fx = fc.getContext('2d');
+  const g = fx.createRadialGradient(128, 128, 10, 128, 128, 128); g.addColorStop(0, '#fff'); g.addColorStop(0.55, '#aaa'); g.addColorStop(1, '#000');
+  fx.fillStyle = g; fx.fillRect(0, 0, 256, 256);
+  const alpha = new THREE.CanvasTexture(fc);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(3.2, 64), std({ color: 0x2b1b10, roughness: 0.82, metalness: 0, transparent: true, alphaMap: alpha, envMapIntensity: 0.4, depthWrite: false }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, 0.3); floor.receiveShadow = true; scene.add(floor);
+}
+
+/* ==========================================================================
+   Marbles: motion along paths under gravity, handed from part to part
+   ========================================================================== */
+const G_LOCAL = V3(0, -G, 0).applyAxisAngle(V3(1, 0, 0), BOARD_TILT);   // gravity in board space
+PATHS.A.ballOffset = 0.0042; PATHS.gutter.ballOffset = 0.0035; PATHS.clear.ballOffset = 0;
+const PARK_POS = V3(PARK_X, yA(PARK_X) + PATHS.A.ballOffset, ZT);
+
+const TINTS = [0xff9f2e, 0x3d7bff, 0x22c47e, 0xff4757, 0x14b8c9, 0xa06bff, 0xffc233, 0x5fd36a];
+function swirlGeometry(r) {
+  const geos = [];
+  for (let v = 0; v < 3; v++) {
+    const h = r * 0.9, w = r * 0.5; const sh = new THREE.Shape();
+    sh.moveTo(0, -h); sh.quadraticCurveTo(w, 0, 0, h); sh.quadraticCurveTo(-w, 0, 0, -h);
+    const g = new THREE.ShapeGeometry(sh, 10); const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i); const a = (y / h) * 1.15 + v * Math.PI / 3; pos.setXYZ(i, x * Math.cos(a), y, x * Math.sin(a)); }
+    g.computeVertexNormals(); geos.push(g);
+  }
+  return mergeGeometries(geos);
+}
+const GLASS_GEO = new THREE.SphereGeometry(R_GLASS, 32, 22);
+const SWIRL_GEO = swirlGeometry(R_GLASS);
+const PROXY_GEO = new THREE.SphereGeometry(R_GLASS * 0.72, 12, 8);
+const PROXY_MAT = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
+const _t = V3(), _ax = V3(), _q = new THREE.Quaternion(), UPV = V3(0, 1, 0);
+
+class Marble {
+  constructor(i, isBall) {
+    this.i = i; this.isBall = isBall; this.r = isBall ? R_BALL : R_GLASS;
+    this.obj = new THREE.Group(); this.spin = new THREE.Group(); this.obj.add(this.spin);
+    if (isBall) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(R_BALL, 36, 26), MAT.steel); m.castShadow = true; this.spin.add(m);
+    } else {
+      const tint = new THREE.Color(TINTS[i % TINTS.length]);
+      const glassTint = tint.clone();
+      const swirlTint = tint.clone().lerp(new THREE.Color(0xfff6e0), 0.55);
+      const glass = new THREE.Mesh(GLASS_GEO, glassMaterial(glassTint)); glass.renderOrder = 3;
+      const core = new THREE.Mesh(SWIRL_GEO, std({ color: swirlTint, roughness: 0.3, metalness: 0.0, emissive: swirlTint, emissiveIntensity: 0.35, side: THREE.DoubleSide, envMapIntensity: 1.0 }));
+      const proxy = new THREE.Mesh(PROXY_GEO, PROXY_MAT); proxy.castShadow = true;
+      this.spin.add(core, glass, proxy);
+      this.spin.rotation.set(i * 1.7, i * 2.3, i * 0.9);
+    }
+    board.add(this.obj);
+    this.mode = 'hold'; this.path = null; this.s = 0; this.v = 0; this.opts = null; this.attachFn = null;
+    this.resting = true; this.offset = 0; this.home = true;
+  }
+  follow(path, opts = {}) {
+    this.mode = 'path'; this.path = path; this.opts = opts; this.s = opts.s0 ?? 0; this.v = opts.v0 ?? this.v;
+    this.offset = opts.offset ?? (this.isBall ? (path.ballOffset ?? 0) : 0);
+    this.resting = false; this.home = false;
+    if (opts.events) for (const e of opts.events) e.done = e.s < this.s;
+  }
+  hold(p) { this.mode = 'hold'; this.v = 0; this.path = null; this.opts = null; this.obj.position.copy(p); this.resting = true; }
+  attach(fn) { this.mode = 'attach'; this.attachFn = fn; this.resting = false; this.home = false; }
+  rollAlong(dir, dist) {
+    _ax.crossVectors(UPV, dir); const l = _ax.length(); if (l < 1e-4) return; _ax.divideScalar(l);
+    _q.setFromAxisAngle(_ax, dist / this.r); this.spin.quaternion.premultiply(_q);
+  }
+  spinZ(a) { _q.setFromAxisAngle(V3(0, 0, 1), a); this.spin.quaternion.premultiply(_q); }
+}
+const MARBLES = [];
+for (let i = 0; i < 8; i++) { const m = new Marble(i, false); MARBLES.push(m); POCKETS[i].marble = m; m.hold(POCKETS[i].rest); }
+const BALL = new Marble(8, true); MARBLES.push(BALL); BALL.hold(PARK_POS); BALL.atPark = true;
+
+const GUTTER = [];            // marbles in the collector gutter, head (closest to lift) first
+const _p = V3();
+
+function stepMarble(m, dt) {
+  if (m.mode === 'attach') { m.attachFn(dt); return; }
+  if (m.mode !== 'path') return;
+  const path = m.path, o = m.opts;
+  const t = path.tangentAt(m.s, _t);
+  const steep = smooth(clamp((Math.abs(t.y) - 0.8) / 0.18, 0, 1));
+  const k = lerp(ROLL_K, 1, steep);
+  let a = G_LOCAL.dot(t) * k;
+  const fr = (o.friction ?? ROLL_FRICTION) * (1 - steep);
+  if (m.v > 0.002) a -= fr; else if (m.v < -0.002) a += fr; else if (Math.abs(a) < fr) a = 0;
+  a -= (o.drag ?? 0.3) * m.v * Math.abs(m.v);
+  m.v += a * dt;
+  if (!o.queue && m.v < (o.vmin ?? 0.05)) m.v = o.vmin ?? 0.05;
+  const s0 = m.s; let s1 = m.s + m.v * dt;
+  if (o.queue) {
+    const idx = GUTTER.indexOf(m); const ahead = idx > 0 ? GUTTER[idx - 1] : null;
+    const limit = ahead ? ahead.s - (ahead.r + m.r) : path.length;
+    let atLimit = false;
+    if (s1 >= limit) {
+      s1 = limit; atLimit = true;
+      const av = ahead ? Math.max(0, ahead.v) : 0; const rel = m.v - av;
+      if (rel > 0.12) { m.v = av - rel * 0.3; SFX.clack(Math.min(1, rel * 0.6)); }
+      else m.v = av;
+    }
+    if (s1 < 0) { s1 = 0; m.v = 0; }
+    m.resting = atLimit && Math.abs(m.v) < 0.02 && (!ahead || ahead.resting);
+  }
+  m.s = s1;
+  const dist = s1 - s0;
+  if (o.events) {
+    for (const e of o.events) {
+      if (!e.done && s0 < e.s && s1 >= e.s) { e.done = true; e.fn(m); if (m.mode !== 'path' || m.path !== path) return; }
+    }
+  }
+  path.pointAt(Math.min(m.s, path.length), m.obj.position);
+  if (m.offset) m.obj.position.y += m.offset;
+  if (o.bumps) {                         // ride up and over marbles already sitting in pockets
+    const reach = m.r + R_GLASS;
+    for (const p of o.bumps) {
+      if (!p.marble || p.marble === m) continue;
+      const dx = m.obj.position.x - p.x; if (Math.abs(dx) >= reach) continue;
+      const lift = Math.sqrt(reach * reach - dx * dx) - POCKET_DIP - (m.offset || 0);
+      if (lift > 0) m.obj.position.y += lift;
+    }
+  }
+  m.rollAlong(t, dist);
+  if (!o.queue && m.s >= path.length) { m.s = path.length; if (o.onEnd) o.onEnd(m); }
+}
+
+/* --- routing: where a marble goes next is decided by the mechanism --- */
+function aRailEvents() {
+  const evs = POCKETS.filter(p => p.row === 'A').map(p => ({ s: p.s - 0.003, fn: m => tryPocket(m, p) }));
+  evs.push({ s: PATHS.A_sortS - 0.002, fn: m => { if (!m.isBall) { SFX.tick(0.25); m.follow(PATHS.B, { v0: Math.max(0.1, m.v * 0.5), drag: 0.5, events: bRailEvents(), bumps: POCKETS.filter(q => q.row === 'B'), onEnd: m2 => m2.hold(PATHS.B.end.clone()) }); } } });
+  return evs.sort((a, b) => a.s - b.s);
+}
+function bRailEvents() {
+  return POCKETS.filter(p => p.row === 'B').map(p => ({ s: p.s - 0.003, fn: m => tryPocket(m, p) })).sort((a, b) => a.s - b.s);
+}
+function tryPocket(m, p) {
+  if (m.isBall || p.marble || p.reserved || p.gateOpen > 0.02) return;          // occupied or too big: roll over it
+  p.reserved = true;
+  const from = m.obj.position.clone(), to = p.rest.clone(); const dir = to.clone().sub(from); let t = 0; const dur = 0.085;
+  m.attach(dt => {
+    t += dt; const u = clamp(t / dur, 0, 1);
+    const prev = m.obj.position.clone();
+    m.obj.position.lerpVectors(from, to, u * u);
+    m.rollAlong(dir.clone().normalize(), m.obj.position.distanceTo(prev));
+    if (u >= 1) { p.marble = m; p.reserved = false; m.hold(to); m.home = true; SFX.tick(0.45); }
+  });
+}
+function onLiftTop(m) {
+  m.follow(PATHS.A, { v0: 0.22, drag: 0.4, events: aRailEvents(), bumps: POCKETS.filter(q => q.row === 'A'), onEnd: m2 => { m2.hold(PARK_POS); m2.home = true; m2.atPark = true; SFX.clack(0.5); } });
+}
+function releasePocket(p) {
+  const m = p.marble; if (!m) return false;
+  p.marble = null; p.gateTarget = 1; p.gateHold = 0.3;
+  m.follow(p.drop, { v0: 0.03, drag: 0.8, vmin: 0.03, onEnd: m2 => enterToggle(m2, p.bit) });
+  RUNSTATE.dropped += 1; setCounterTarget(RUNSTATE.dropped); SFX.gate();
+  return true;
+}
+function enterToggle(m, k) {
+  const st = TOGGLES[k].state;          // which cup is high decides where the marble lands
+  m.follow(TOG[k].land[st], { v0: clamp(m.v * 0.28, 0.3, 0.62), vmin: 0.25, drag: 0, onEnd: m2 => tipToggle(m2, k, st) });
+}
+function tipToggle(m, k, st) {
+  const T = TOGGLES[k];
+  const phi0 = T.phi, phi1 = tiltOf(1 - st);
+  const cupLocal = st === 0 ? CUP.clone() : V3(-CUP.x, CUP.y);
+  T.state = 1 - st; T.anim = null; T.busy = true;
+  let t = 0; const dur = 0.125; let last = phi0;
+  m.attach(dt => {
+    t += dt; const u = clamp(t / dur, 0, 1); const e = u * u;
+    T.phi = lerp(phi0, phi1, e);
+    const w = rotZ(cupLocal, T.phi); m.obj.position.set(X[k] + w.x, Y[k] + w.y, ZT);
+    m.spinZ(T.phi - last); last = T.phi;
+    if (u >= 1) {
+      T.busy = false; T.bounceT = 0; T.bounceFrom = phi0; T.flash = 1;
+      SFX.toggle(k, 1);
+      if (st === 0) m.follow(TOG[k].done, { v0: 0.32, drag: 0.5, onEnd: m2 => joinGutter(m2, TOG[k].doneJoinS) });
+      else if (k < NBITS - 1) m.follow(TOG[k].carry, { v0: 0.32, drag: 0.3, onEnd: m2 => enterToggle(m2, k + 1) });
+      else m.follow(TOG[k].carry, { v0: 0.32, onEnd: m2 => joinGutter(m2, PATHS.gutter.closestS(m2.obj.position)) });
+    }
+  });
+}
+function joinGutter(m, s) {
+  const v = Math.max(0.15, m.v * 0.32 + 0.12);
+  m.follow(PATHS.gutter, { s0: s, v0: v, queue: true, drag: 0.4, events: [{ s: PATHS.tripS, fn: () => tripLever() }] });
+  // keep the queue ordered, head (largest s) first
+  let i = 0; while (i < GUTTER.length && GUTTER[i].s > s) i++;
+  GUTTER.splice(i, 0, m);
+  SFX.clack(0.35);
+}
+function launchClearBall() {
+  BALL.atPark = false;
+  const evs = PATHS.clearFlagS.map((s, k) => ({ s, fn: m => flagHit(m, k) }));
+  BALL.follow(PATHS.clear, { v0: 0.06, drag: 0.32, events: evs, onEnd: m => joinGutter(m, PATHS.clearJoinS) });
+}
+function flagHit(m, k) {
+  const T = TOGGLES[k];
+  if (T.state !== 1) return;            // flag is down: the ball rolls over it
+  T.state = 0; T.anim = { from: T.phi, to: tiltOf(0), t: 0, dur: 0.09 }; T.flash = 1;
+  m.v *= 0.78; SFX.toggle(k, 0.8);
+}
+
+/* --- lift: the screw carries one marble per turn from the tray to the top rail --- */
+function tryPickup(boundaryAngle) {
+  const head = GUTTER[0];
+  if (!head || !head.resting || head.s < PATHS.gutter.length - 0.002) return;
+  GUTTER.shift();
+  const m = head; const a0 = boundaryAngle; const off = m.isBall ? 0.0035 : 0;
+  let lastY = LIFT_Y0;
+  m.attach(() => {
+    const y = LIFT_Y0 + (LIFT.angle - a0) / (Math.PI * 2) * LIFT.pitch;
+    m.obj.position.set(LIFT_X, y + off, ZT);
+    m.rollAlong(V3(0, 0, 1), (y - lastY) * 0.4); lastY = y;
+    if (y >= LIFT_Y1) onLiftTop(m);
+  });
+  SFX.tick(0.3);
+}
+function updateLift(dt) {
+  const target = LIFT.running ? LIFT.revPerSec : 0;
+  LIFT.speed += (target - LIFT.speed) * Math.min(1, dt * 2.5);
+  if (!LIFT.running && LIFT.speed < 0.03) LIFT.speed = 0;
+  const prev = LIFT.angle; LIFT.angle += LIFT.speed * Math.PI * 2 * dt;
+  LIFT.screw.rotation.y = -LIFT.angle;
+  const TAU = Math.PI * 2;
+  if (Math.floor(LIFT.angle / TAU) > Math.floor(prev / TAU)) tryPickup(Math.floor(LIFT.angle / TAU) * TAU);
+}
+
+/* ==========================================================================
+   Sequencer, trip lever, run control
+   ========================================================================== */
+const RUNSTATE = { phase: 'ready', dropped: 0, seqDone: true, queued: false, t: 0, launched: false, resultBits: null, hasResult: false };
+
+function tripLever() {
+  TRIP.t = 0; SFX.trip();
+  if (SEQ.mode === 'armed' || SEQ.mode === 'waiting') { SEQ.mode = 'moving'; SEQ.target = SEQ.step + 1; SEQ.pawlT = 0; }
+}
+function updateSequencer(dt) {
+  if (SEQ.mode === 'moving') {
+    const goal = SEQ.target * SEQ_STEP;
+    SEQ.angle = Math.min(goal, SEQ.angle + dt * 6.0);
+    if (SEQ.angle >= goal - 1e-6) {
+      SEQ.step = SEQ.target; SFX.tick(0.15);
+      if (SEQ.step >= 9) { SEQ.step = 0; SEQ.angle = 0; SEQ.mode = 'idle'; RUNSTATE.seqDone = true; }
+      else {
+        const p = POCKETS[SEQ.step - 1];               // steps 1..4 feed A bits 0..3, steps 5..8 feed B bits 0..3
+        if (p.sw === 1 && p.marble) { releasePocket(p); SEQ.mode = 'waiting'; }
+        else SEQ.target = SEQ.step + 1;                // switch latched off: the wheel runs on
+      }
+    }
+  }
+  SEQ.group.rotation.z = -SEQ.angle;
+  SEQ.pawlT = (SEQ.pawlT ?? 1) + dt;
+  SEQ.pawl.rotation.z = 0.5 + 0.35 * Math.exp(-SEQ.pawlT * 14) * Math.sin(SEQ.pawlT * 40);
+}
+const allResting = () => MARBLES.every(m => m.mode === 'hold' || (m.mode === 'path' && m.opts.queue && m.resting));
+const allHome = () => POCKETS.every(p => p.marble && p.marble.mode === 'hold') && BALL.atPark && BALL.mode === 'hold';
+const readToggles = () => [4, 3, 2, 1, 0].map(k => TOGGLES[k].state).join('');
+
+function requestRun() {
+  if (RUNSTATE.phase === 'ready') startRun();
+  else if (RUNSTATE.phase === 'result' || RUNSTATE.phase === 'refill') RUNSTATE.queued = true;
+}
+function startRun() {
+  RUNSTATE.phase = 'starting'; RUNSTATE.t = 0; RUNSTATE.launched = false; RUNSTATE.queued = false;
+  RUNSTATE.dropped = 0; RUNSTATE.hasResult = false; setCounterTarget(0);
+  LEVER.pullT = 0; SFX.lever();
+}
+function updateRun(dt) {
+  const R = RUNSTATE; R.t += dt;
+  if (R.phase === 'starting') {
+    if (!R.launched && LEVER.pullT > 0.26) {
+      R.launched = true; PARKGATE.target = 1; PARKGATE.closeAt = 0.7;
+      SEQ.step = 0; SEQ.angle = 0; SEQ.mode = 'armed'; R.seqDone = false;
+      launchClearBall();
+      R.phase = 'running'; R.t = 0;
+    }
+  } else if (R.phase === 'running') {
+    if (R.seqDone && allResting()) {
+      R.resultBits = readToggles(); R.hasResult = true;       // read back from the flip flops
+      R.phase = 'result'; R.t = 0;
+    }
+  } else if (R.phase === 'result') {
+    if (R.t > 1.6) { R.phase = 'refill'; R.t = 0; LIFT.running = true; }
+  } else if (R.phase === 'refill') {
+    if (allHome()) { LIFT.running = false; R.phase = 'ready'; R.t = 0; if (R.queued) startRun(); }
+  }
+  if (PARKGATE.closeAt !== undefined && PARKGATE.target === 1) { PARKGATE.closeAt -= dt; if (PARKGATE.closeAt <= 0) PARKGATE.target = 0; }
+}
+function toggleSwitch(i) {
+  const p = POCKETS[i];
+  if (RUNSTATE.phase === 'starting' || RUNSTATE.phase === 'running') { p.wiggle = 0; SFX.locked(); return false; }
+  p.sw = 1 - p.sw; SFX.switch(); return true;
+}
+
+/* --- demo: 5+6, 9+7, 15+15 --- */
+const DEMO = { active: false, cases: [['0101', '0110'], ['1001', '0111'], ['1111', '1111']], idx: 0, stage: 'idle', t: 0, flips: [] };
+const demoBtn = document.getElementById('demo');
+function setDemo(on) {
+  DEMO.active = on; DEMO.idx = 0; DEMO.stage = on ? 'waitReady' : 'idle'; DEMO.t = 0;
+  demoBtn.textContent = on ? 'Stop demo' : 'Demo'; demoBtn.classList.toggle('on', on);
+  if (on) CAM.userUntil = 0;
+}
+function updateDemo(dt) {
+  if (!DEMO.active) return; DEMO.t += dt;
+  const [a, b] = DEMO.cases[DEMO.idx] || [];
+  if (DEMO.stage === 'waitReady') {
+    if (RUNSTATE.phase === 'ready') {
+      DEMO.flips = [];
+      for (const k of [3, 2, 1, 0]) if (POCKETS[k].sw !== +a[3 - k]) DEMO.flips.push(k);
+      for (const k of [3, 2, 1, 0]) if (POCKETS[4 + k].sw !== +b[3 - k]) DEMO.flips.push(4 + k);
+      DEMO.stage = 'setting'; DEMO.t = -0.7;
+    }
+  } else if (DEMO.stage === 'setting') {
+    if (DEMO.t >= 0) {
+      if (DEMO.flips.length) { toggleSwitch(DEMO.flips.shift()); DEMO.t = -0.32; }
+      else { DEMO.stage = 'pull'; DEMO.t = -0.9; }
+    }
+  } else if (DEMO.stage === 'pull') {
+    if (DEMO.t >= 0) { requestRun(); DEMO.stage = 'running'; DEMO.t = 0; }
+  } else if (DEMO.stage === 'running') {
+    if (RUNSTATE.hasResult && RUNSTATE.phase !== 'starting' && RUNSTATE.phase !== 'running') { DEMO.stage = 'hold'; DEMO.t = 0; }
+  } else if (DEMO.stage === 'hold') {
+    if (DEMO.t > 1.2) {
+      DEMO.idx++;
+      if (DEMO.idx >= DEMO.cases.length) { DEMO.stage = 'finish'; }
+      else DEMO.stage = 'waitReady';
+    }
+  } else if (DEMO.stage === 'finish') {
+    if (RUNSTATE.phase === 'ready') setDemo(false);
+  }
+}
+
+/* ==========================================================================
+   Sound: short clicks, created on the first user gesture
+   ========================================================================== */
+const SFX = (() => {
+  let ctx = null, master = null, noise = null, lastClack = 0;
+  function init() {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    ctx = new AC();
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+    master = ctx.createGain(); master.gain.value = 0.8; master.connect(comp); comp.connect(ctx.destination);
+    noise = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.2), ctx.sampleRate);
+    const d = noise.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.012));
+  }
+  function click(freq, q, gain, dur, tone = 0, toneGain = 0) {
+    if (!ctx || ctx.state !== 'running' || gain < 0.005) return;
+    const t = ctx.currentTime + 0.002;
+    const src = ctx.createBufferSource(); src.buffer = noise; src.playbackRate.value = 0.9 + Math.random() * 0.2;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = q;
+    const g = ctx.createGain(); g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(master); src.start(t); src.stop(t + dur + 0.03);
+    if (tone) {
+      const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(tone, t); o.frequency.exponentialRampToValueAtTime(tone * 0.94, t + 0.07);
+      const og = ctx.createGain(); og.gain.setValueAtTime(toneGain, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.085);
+      o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.1);
+    }
+  }
+  const NOTE = [1318.5, 1174.7, 987.8, 880.0, 784.0];   // each bit clicks at its own pitch
+  return {
+    init,
+    toggle: (k, v = 1) => click(3000, 1.3, 0.6 * v, 0.05, NOTE[k] * 0.5, 0.2 * v),
+    switch: () => click(4300, 2.2, 0.4, 0.03, 2400, 0.05),
+    locked: () => click(700, 1.0, 0.35, 0.06),
+    tick: (v = 0.3) => click(5400, 3, 0.3 * v, 0.02),
+    clack: (v = 0.5) => { const n = performance.now(); if (n - lastClack < 25) return; lastClack = n; click(2500, 1.6, 0.32 * v, 0.035, 1850, 0.04 * v); },
+    gate: () => click(3700, 2.2, 0.22, 0.03),
+    trip: () => click(2100, 2.0, 0.2, 0.03, 540, 0.06),
+    lever: () => click(1300, 0.8, 0.55, 0.09, 170, 0.3),
+  };
+})();
+
+/* ==========================================================================
+   Camera: slow, follows the busiest part of the machine
+   ========================================================================== */
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.08;
+controls.minDistance = 0.6; controls.maxDistance = 6; controls.maxPolarAngle = Math.PI * 0.62;
+controls.target.set(-0.02, 0.78, 0);
+const CAM = { focus: V3(-0.02, 0.78, 0), fv: V3(), dist: 3.2, dv: 0, yaw: 0, pitch: 0.12, extent: 0.4, user: false, userUntil: 0, resync: false };
+controls.addEventListener('start', () => { CAM.user = true; });
+controls.addEventListener('end', () => { CAM.user = false; CAM.userUntil = performance.now() / 1000 + 6; CAM.resync = true; });
+
+const OVERVIEW = { c: V3(-0.02, 0.73, 0.05), halfW: 0.9, halfH: 0.66 };
+const _w = V3();
+function viewDistance(halfW, halfH) {
+  const tv = Math.tan(camera.fov * DEG / 2); const th = tv * camera.aspect;
+  return Math.max(halfW / th, halfH / tv);
+}
+function desiredShot(time) {
+  const pts = [];
+  for (const m of MARBLES) {
+    if (m.mode === 'hold' || (m.mode === 'path' && m.opts.queue && m.resting)) continue;
+    let w = 1;
+    if (m.mode === 'attach' && m.obj.position.x < LIFT_X + 0.05) w = 0.5;   // riding the lift
+    else if (m.mode === 'path' && m.opts.queue) w = 0.3;                     // rolling home along the gutter
+    pts.push([m.obj.position, w]);
+  }
+  for (const T of TOGGLES) if (T.flash > 0.02) pts.push([P(T.k), 1.5 * T.flash]);
+  let c = null;
+  if (pts.length) { c = V3(); let W = 0; for (const [p, w] of pts) { c.addScaledVector(p, w); W += w; } c.divideScalar(W); }
+  const R = RUNSTATE; const REG = V3(0.0, 0.7, ZT);
+  let focus, h;
+  if (R.phase === 'starting' || R.phase === 'running') {
+    // the register is the busy part: keep all five toggles in shot, lean towards the moving marble
+    focus = V3(0.0, 0.76, ZT); if (c) { focus.x = clamp(c.x * 0.35, -0.08, 0.08); focus.y = clamp(0.76 + (c.y - 0.76) * 0.35, 0.68, 0.84); } h = 0.5;
+  } else if (R.phase === 'result') {
+    focus = V3(0.0, 0.68, ZT); h = 0.47;
+  } else if (R.phase === 'refill') {
+    focus = V3(-0.22, 0.84, ZT); if (c) focus.lerp(c, 0.5); h = 0.56;
+  } else if (DEMO.active) {
+    focus = V3(0.1, 0.99, ZT); h = 0.42;             // watch the switches being set
+  } else {
+    focus = OVERVIEW.c.clone(); h = null;
+  }
+  const dist = h ? viewDistance(h, h * 0.86) : viewDistance(OVERVIEW.halfW, OVERVIEW.halfH) * 1.02;
+  focus.x = clamp(focus.x, -0.55, 0.5); focus.y = clamp(focus.y, 0.45, 1.0);
+  const yaw = 0.27 * Math.sin(time * 0.047 + 0.6) + 0.06 * Math.sin(time * 0.113 + 1.3);
+  const pitch = 0.14 + 0.05 * Math.sin(time * 0.067 + 0.4);
+  return { focus: board.localToWorld(focus.clone()), dist, yaw, pitch };
+}
+function spring1(x, v, target, w, dt) { v += (w * w * (target - x) - 2 * w * v) * dt; x += v * dt; return [x, v]; }
+function updateCamera(dt, time) {
+  if (CAM.user || time < CAM.userUntil) { controls.update(); return; }
+  if (CAM.resync) {
+    CAM.focus.copy(controls.target); const off = camera.position.clone().sub(controls.target);
+    CAM.dist = off.length(); CAM.yaw = Math.atan2(off.x, off.z); CAM.pitch = Math.asin(clamp(off.y / CAM.dist, -1, 1));
+    CAM.fv.set(0, 0, 0); CAM.dv = 0; CAM.resync = false;
+  }
+  const want = desiredShot(time);
+  const w = 0.85;
+  CAM.fv.addScaledVector(want.focus.clone().sub(CAM.focus).multiplyScalar(w * w).addScaledVector(CAM.fv, -2 * w), dt);
+  CAM.focus.addScaledVector(CAM.fv, dt);
+  [CAM.dist, CAM.dv] = spring1(CAM.dist, CAM.dv, want.dist, 0.6, dt);
+  CAM.yaw = lerp(CAM.yaw, want.yaw, Math.min(1, dt * 0.8));
+  CAM.pitch = lerp(CAM.pitch, want.pitch, Math.min(1, dt * 0.8));
+  const cp = Math.cos(CAM.pitch);
+  camera.position.set(CAM.focus.x + Math.sin(CAM.yaw) * cp * CAM.dist, CAM.focus.y + Math.sin(CAM.pitch) * CAM.dist, CAM.focus.z + Math.cos(CAM.yaw) * cp * CAM.dist);
+  camera.lookAt(CAM.focus);
+  controls.target.copy(CAM.focus);
+}
+
+/* ==========================================================================
+   HUD
+   ========================================================================== */
+const $ = id => document.getElementById(id);
+const HUDEL = { abits: $('abits'), adec: $('adec'), bbits: $('bbits'), bdec: $('bdec'), count: $('count'), rbits: $('rbits'), rdec: $('rdec'), status: $('status') };
+const hudCache = {};
+function setText(key, el, text) { if (hudCache[key] !== text) { hudCache[key] = text; el.textContent = text; } }
+function updateHUD() {
+  const a = [3, 2, 1, 0].map(k => POCKETS[k].sw).join(''), b = [3, 2, 1, 0].map(k => POCKETS[4 + k].sw).join('');
+  setText('ab', HUDEL.abits, a); setText('ad', HUDEL.adec, String(parseInt(a, 2)));
+  setText('bb', HUDEL.bbits, b); setText('bd', HUDEL.bdec, String(parseInt(b, 2)));
+  setText('c', HUDEL.count, String(RUNSTATE.dropped).padStart(2, '0'));
+  const R = RUNSTATE; const live = R.phase === 'starting' || R.phase === 'running';
+  if (live || !R.hasResult) {
+    setText('rb', HUDEL.rbits, readToggles());
+    setText('rd', HUDEL.rdec, live ? '…' : ' ');
+    if (!HUDEL.rbits.classList.contains('live')) HUDEL.rbits.classList.add('live');
+  } else {
+    setText('rb', HUDEL.rbits, R.resultBits);
+    setText('rd', HUDEL.rdec, '= ' + parseInt(R.resultBits, 2));
+    if (HUDEL.rbits.classList.contains('live')) HUDEL.rbits.classList.remove('live');
+  }
+  let st = '';
+  if (R.phase === 'ready') st = R.hasResult ? 'result held on the toggles · ready' : 'ready · pull RUN';
+  else if (R.phase === 'starting') st = 'RUN pulled';
+  else if (R.phase === 'running') {
+    if (SEQ.mode === 'armed') st = 'clear ball resetting the toggles';
+    else if (!R.seqDone) st = SEQ.step <= 4 ? 'feeding A marbles' : 'feeding B marbles';
+    else st = 'last marble rolling home';
+  } else if (R.phase === 'result') st = 'read from the toggles';
+  else if (R.phase === 'refill') st = R.queued ? 'returning marbles · run queued' : 'returning marbles';
+  if (DEMO.active && DEMO.cases[DEMO.idx]) {
+    const [da, db] = DEMO.cases[DEMO.idx];
+    st = `demo ${DEMO.idx + 1}/3 · ${parseInt(da, 2)} + ${parseInt(db, 2)} · ` + st;
+  }
+  setText('st', HUDEL.status, st);
+}
+
+/* ==========================================================================
+   Input
+   ========================================================================== */
+const raycaster = new THREE.Raycaster(); const ndc = new THREE.Vector2();
+let downAt = null;
+function pick(ev) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObjects(HIT, false)[0];
+  return hit ? hit.object.userData : null;
+}
+function firstGesture() { SFX.init(); }
+window.addEventListener('pointerdown', firstGesture, { passive: true });
+window.addEventListener('keydown', firstGesture);
+canvas.addEventListener('pointerdown', ev => { downAt = [ev.clientX, ev.clientY]; });
+canvas.addEventListener('pointerup', ev => {
+  if (!downAt) return; const moved = Math.hypot(ev.clientX - downAt[0], ev.clientY - downAt[1]); downAt = null;
+  if (moved > 6) return;
+  const hit = pick(ev); if (!hit) return;
+  if (hit.type === 'switch') toggleSwitch(hit.pocket);
+  else if (hit.type === 'lever') requestRun();
+});
+let hoverT = 0;
+canvas.addEventListener('pointermove', ev => {
+  const n = performance.now(); if (n - hoverT < 60) return; hoverT = n;
+  canvas.style.cursor = pick(ev) ? 'pointer' : 'grab';
+});
+window.addEventListener('keydown', ev => {
+  if (ev.code === 'Space' || ev.code === 'Enter') { ev.preventDefault(); requestRun(); }
+  else if (ev.key === 'd' || ev.key === 'D') setDemo(!DEMO.active);
+});
+demoBtn.addEventListener('click', () => { SFX.init(); setDemo(!DEMO.active); });
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+  camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+});
+
+/* ==========================================================================
+   Per frame animation of the mechanism
+   ========================================================================== */
+function animateParts(dt) {
+  for (const T of TOGGLES) {
+    if (T.anim) {
+      T.anim.t += dt; const u = clamp(T.anim.t / T.anim.dur, 0, 1);
+      T.phi = lerp(T.anim.from, T.anim.to, 1 - (1 - u) * (1 - u));
+      if (u >= 1) { T.bounceT = 0; T.bounceFrom = T.anim.from; T.anim = null; }
+    } else if (!T.busy && T.bounceT !== undefined && T.bounceT < 0.35) {
+      T.bounceT += dt; const to = tiltOf(T.state);
+      T.phi = to + (T.bounceFrom - to) * 0.08 * Math.exp(-T.bounceT / 0.05) * Math.abs(Math.sin(T.bounceT * 58));
+    }
+    T.group.rotation.z = T.phi;
+    T.flash = Math.max(0, (T.flash || 0) - dt * 0.9);
+  }
+  for (const p of POCKETS) {
+    if (p.gateHold !== undefined && p.gateTarget === 1) { p.gateHold -= dt; if (p.gateHold <= 0) p.gateTarget = 0; }
+    p.gateOpen += (p.gateTarget - p.gateOpen) * Math.min(1, dt * 22);
+    p.gate.rotation.z = p.gateOpen * 1.15;
+    p.swAnim += (p.sw - p.swAnim) * Math.min(1, dt * 26);
+    let wig = 0; if (p.wiggle !== undefined && p.wiggle < 0.4) { p.wiggle += dt; wig = 0.12 * Math.exp(-p.wiggle * 9) * Math.sin(p.wiggle * 60); }
+    p.swArm.rotation.z = lerp(-0.9, 0.9, p.swAnim) + wig;
+  }
+  PARKGATE.open += (PARKGATE.target - PARKGATE.open) * Math.min(1, dt * 18);
+  PARKGATE.group.position.y = PARKGATE.base.y + PARKGATE.open * 0.034;
+  // RUN lever: pull, hold, spring back
+  if (LEVER.pullT >= 0) {
+    LEVER.pullT += dt; const t = LEVER.pullT;
+    LEVER.angle = t < 0.28 ? -0.8 * smooth(t / 0.28) : t < 0.45 ? -0.8 : t < 0.95 ? -0.8 * (1 - smooth((t - 0.45) / 0.5)) : 0;
+    if (t >= 0.95) LEVER.pullT = -1;
+  }
+  LEVER.group.rotation.z = -0.12 + LEVER.angle;
+  const tail = rotZ(V3(0, -0.042), -0.12 + LEVER.angle).add(LEVER_PIVOT); tail.z = ZT + 0.004;
+  const gp = PARKGATE.group.position.clone().add(V3(0, 0.048, -0.016));
+  placeRod(LEVER.rod, tail, gp);
+  // trip lever and push rod
+  TRIP.t += dt; const pulse = TRIP.t < 0.05 ? TRIP.t / 0.05 : Math.max(0, 1 - (TRIP.t - 0.05) / 0.18);
+  TRIP.group.rotation.z = -0.55 * pulse;
+  placeRod(TRIP.rod, TRIP.rodBottom.clone().add(V3(0, 0.006 * pulse, 0)), TRIP.rodTop.clone().add(V3(0, 0.006 * pulse, 0)));
+  // odometer
+  for (let i = 0; i < 2; i++) {
+    const d = COUNTER.targets[i] - COUNTER.angles[i];
+    COUNTER.angles[i] += Math.sign(d) * Math.min(Math.abs(d), dt * 9);
+    COUNTER.wheels[i].rotation.x = COUNTER.angles[i];
+  }
+}
+
+/* ==========================================================================
+   Build + loop
+   ========================================================================== */
+buildStatic();
+buildBoardAndStand();
+flushBuckets();
+// start with A = 6, B = 3 so a first RUN does something
+for (const k of [1, 2]) POCKETS[k].sw = 1;
+for (const k of [0, 1]) POCKETS[4 + k].sw = 1;
+for (const p of POCKETS) p.swAnim = p.sw;
+CAM.resync = false;
+{ const s = desiredShot(0); CAM.focus.copy(s.focus); CAM.dist = s.dist; CAM.yaw = s.yaw; CAM.pitch = s.pitch; }
+
+const SUB = 1 / 240;
+let lastT = performance.now(); let clock = 0;
+function simulate(dt) {
+  const n = Math.max(1, Math.ceil(dt / SUB)); const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    updateLift(h);
+    const q = GUTTER.slice();
+    for (const m of q) stepMarble(m, h);
+    for (const m of MARBLES) if (!q.includes(m)) stepMarble(m, h);
+  }
+  updateSequencer(dt);
+  updateRun(dt);
+  updateDemo(dt);
+  animateParts(dt);
+}
+const QUALITY = { level: 0, samples: [], warm: 0 };
+function degradeQuality() {
+  QUALITY.level++;
+  if (QUALITY.level === 1 && renderer.getPixelRatio() > 1.25) renderer.setPixelRatio(1.25);
+  else if (QUALITY.level <= 2) { QUALITY.level = 2; for (const m of MARBLES) if (!m.isBall) fakeGlass(m.spin.children[1].material); }
+  else if (QUALITY.level === 3) { renderer.setPixelRatio(1); keyLight.shadow.mapSize.set(1024, 1024); if (keyLight.shadow.map) { keyLight.shadow.map.dispose(); keyLight.shadow.map = null; } }
+}
+function governQuality(raw) {
+  if (QUALITY.level >= 3 || document.visibilityState !== 'visible') return;
+  QUALITY.warm += raw; if (QUALITY.warm < 2.5 || raw > 0.1) return;       // ignore start-up and hitches
+  QUALITY.samples.push(raw);
+  if (QUALITY.samples.length >= 90) {
+    const sorted = QUALITY.samples.slice().sort((a, b) => a - b); QUALITY.samples.length = 0;
+    if (sorted[45] > 0.0185) degradeQuality();                        // median frame slower than ~54 fps
+  }
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  const raw = Math.max(0, (now - lastT) / 1000);
+  const dt = Math.min(0.05, raw); lastT = now; clock += dt;
+  governQuality(raw);
+  simulate(dt);
+  updateCamera(dt, clock);
+  updateHUD();
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(frame);
+
+// hooks for automated checks: inspect state, fast-forward time, park the camera
+window.__marble = {
+  RUNSTATE, TOGGLES, POCKETS, MARBLES, SEQ, LIFT, GUTTER, DEMO, QUALITY, requestRun, setDemo, toggleSwitch, readToggles,
+  advance(sec) { const n = Math.round(sec * 60); for (let i = 0; i < n; i++) { simulate(1 / 60); clock += 1 / 60; updateCamera(1 / 60, clock); } },
+  look(px, py, pz, tx, ty, tz) { CAM.userUntil = 1e12; camera.position.set(px, py, pz); controls.target.set(tx, ty, tz); camera.lookAt(tx, ty, tz); },
+  info() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures }; },
+  bench(n = 20) { const gl = renderer.getContext(); const px = new Uint8Array(4); renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); const t0 = performance.now(); for (let i = 0; i < n; i++) renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); return (performance.now() - t0) / n; },
+  simBench(n = 600) { const t0 = performance.now(); for (let i = 0; i < n; i++) simulate(1 / 60); return (performance.now() - t0) / n; },
+};
+</script>
+</body>
+</html>
